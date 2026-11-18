@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Ração Certa",
+    "slug": "racao-certa",
+    "version": "1.0.0",
+    "scheme": "racaocerta",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "pt.racaocerta.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "pt.racaocerta.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B5E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#FF6B5E"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "A Ração Certa usa as tuas fotos para pores uma foto do teu animal.",
+          "cameraPermission": "A Ração Certa usa a câmara para tirares uma foto do teu animal."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "A Ração Certa usa a câmara para ler o código de barras do saco de ração.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ]
+  }
+}
