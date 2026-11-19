@@ -28,11 +28,11 @@
     "react-native-web": "^0.21.4"
   },
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --go",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node --test src/lib/*.test.js",
+    "test": "node --test src/lib/*.test.js server/precos/*.test.js",
     "lint": "expo lint"
   },
   "private": true,

@@ -87,6 +87,14 @@ export function StoreProvider({ children }) {
     return id;
   }, []);
 
+  // Guarda os preços das lojas de uma ração (vindos do servidor de preços).
+  const updateProductOffers = useCallback((productId, offers, updatedAt) => {
+    setState((s) => ({
+      ...s,
+      customProducts: s.customProducts.map((p) => (p.id === productId ? { ...p, offers, pricesUpdatedAt: updatedAt } : p)),
+    }));
+  }, []);
+
   const resetAll = useCallback(async () => {
     setState(EMPTY);
     try {
@@ -108,9 +116,10 @@ export function StoreProvider({ children }) {
       removeAnimal,
       openBag,
       addCustomProduct,
+      updateProductOffers,
       resetAll,
     }),
-    [state, ready, pickedProductId, continueAsGuest, setHouseName, saveAnimal, removeAnimal, openBag, addCustomProduct, resetAll]
+    [state, ready, pickedProductId, continueAsGuest, setHouseName, saveAnimal, removeAnimal, openBag, addCustomProduct, updateProductOffers, resetAll]
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

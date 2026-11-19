@@ -3,7 +3,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { Body, Button, Card, Screen, Title } from '../../components/ui';
-import { DEMO_PRICES_NOTICE } from '../../data/products';
 import { animalStats } from '../../lib/household';
 import { formatEuro, formatNumber } from '../../lib/nutrition';
 import { useStore } from '../../store/AppStore';
@@ -16,10 +15,12 @@ export default function Precos() {
   const groups = {};
   for (const a of animals) {
     const s = animalStats(a, customProducts);
-    if (!s.product) continue;
-    const g = (groups[s.product.id] ||= { product: s.product, offer: s.offer, grams: 0, names: [] });
-    g.grams += s.grams || 0;
-    g.names.push(a.name);
+    for (const part of [s.dry, s.wet]) {
+      if (!part) continue;
+      const g = (groups[part.product.id] ||= { product: part.product, offer: part.offer, grams: 0, names: [] });
+      g.grams += part.grams || 0;
+      g.names.push(a.name);
+    }
   }
   const list = Object.values(groups);
 
@@ -60,7 +61,7 @@ export default function Precos() {
           </Card>
         ))
       )}
-      <Body muted size={12} style={{ textAlign: 'center' }}>{DEMO_PRICES_NOTICE}</Body>
+      <Body muted size={12} style={{ textAlign: 'center' }}>Preços sem portes</Body>
     </Screen>
   );
 }

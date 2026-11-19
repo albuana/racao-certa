@@ -12,6 +12,24 @@ export const SPECIES = {
   dog: { id: 'dog', label: 'Cão', plural: 'Cães' },
 };
 
+// Problemas de saúde com rações próprias (dietas veterinárias).
+// As palavras servem para reconhecer estas rações pelo nome (PT, EN, ES, FR).
+export const HEALTH_CONDITIONS = [
+  { id: 'renal', label: 'Renal', hint: 'rins', pattern: /\b(renal|kidney|k\/d|nf)\b|riñ[oó]n|rins?\b/i },
+  { id: 'urinary', label: 'Urinário', hint: 'cálculos, cistite', pattern: /urin[aá]r|\b(s\/o|c\/d|ur)\b|struvit/i },
+  { id: 'digestive', label: 'Digestivo', hint: 'estômago, intestino', pattern: /gastro|intestinal|\bdigest|\bi\/d\b/i },
+  { id: 'weight', label: 'Peso', hint: 'obesidade', pattern: /obes|\bweight|satiety|saciedade|\br\/d\b|metabolic/i },
+  { id: 'diabetes', label: 'Diabetes', hint: '', pattern: /diab[eé]t|\b(dm|w\/d)\b/i },
+  { id: 'skin', label: 'Pele e alergias', hint: 'hipoalergénica', pattern: /hypoallerg|hipoal[eé]rg|anallerg|\bderm|\bskin\b|\bz\/d\b|\bha\b/i },
+  { id: 'liver', label: 'Fígado', hint: 'hepático', pattern: /hep[aá]tic|\bl\/d\b/i },
+  { id: 'joints', label: 'Articulações', hint: 'mobilidade', pattern: /mobility|mobilidade|\bjoint|articula|\bj\/d\b/i },
+  { id: 'heart', label: 'Coração', hint: 'cardíaco', pattern: /card[ií]ac|\bheart\b/i },
+];
+
+export function conditionLabel(id) {
+  return HEALTH_CONDITIONS.find((c) => c.id === id)?.label || id;
+}
+
 // Portes dos cães (o porte muda as idades de cada fase de vida).
 export const DOG_SIZES = [
   { id: 'small', label: 'Pequeno', hint: 'até 10 kg' },
@@ -133,7 +151,26 @@ export function restingEnergy(weightKg) {
   return 70 * Math.pow(weightKg, 0.75);
 }
 
-// Fator multiplicador sobre o RER.
+// Fator multiplicador sobre o RER (energia de manutenção = RER × fator).
+// Base científica (ver ENERGY_SOURCES):
+//  • RER = 70 × peso^0,75 — igual para cães e gatos (Pet Nutrition Alliance; NRC 2006).
+//  • Gato adulto: esterilizado ×1,2, inteiro ×1,4; propenso a obesidade ×1,0 (Merck/MSD; PNA).
+//  • Gatinhos: crescimento ×2–3 (PNA); ×2,5 em média (Merck/MSD) — aqui: <4 meses ×3,0,
+//    4–6 meses ×2,5, 6–12 meses ×2,0.
+//  • Gato maduro (7–10 anos): pode ser ≈ RER (AAHA/AAFP 2021) → ×1,0 (inteiro ×1,1).
+//  • Gato sénior (11+ anos): a energia volta a subir depois dos ~11–12 anos (AAHA 2023) → ×1,2 (inteiro ×1,3).
+//  • Cão adulto: esterilizado ×1,6, inteiro ×1,8; propenso a obesidade ×1,4 (Merck/MSD; PNA).
+//  • Cachorros: <4 meses ×3,0, >4 meses ×2,0 (Merck/MSD).
+//  • Cão maduro/sénior: a energia baixa com a idade (AAHA 2023) → ×1,4.
+//  • Perder peso: gato ×0,8, cão ×1,0. Atividade alta: cão ×1,2, gato que vai à rua ×1,15.
+export const ENERGY_SOURCES = [
+  'Pet Nutrition Alliance — Calculating Calories Based on Pet Needs (MER/RER)',
+  'Merck/MSD Veterinary Manual — Daily Maintenance Energy Requirements for Dogs and Cats',
+  'AAHA 2021 Feline Life Stage Guidelines — Mature Adult and Senior Cats',
+  'AAHA 2023 Senior Care Guidelines for Dogs and Cats — Nutrition',
+  'NRC (2006) Nutrient Requirements of Dogs and Cats',
+];
+
 export function energyFactor(animal) {
   const { species, stage, neutered, goal, active } = animal;
   const ageMonths = animal.ageMonths;
@@ -143,17 +180,22 @@ export function energyFactor(animal) {
     if (stage === 'junior') return ageMonths != null && ageMonths < 4 ? 3.0 : 2.0;
     if (lose) return 1.0;
     let f;
-    if (stage === 'senior') f = 1.4;
-    else if (stage === 'mature') f = neutered ? 1.4 : 1.6;
+    if (stage === 'senior' || stage === 'mature') f = neutered ? 1.4 : 1.6;
     else f = neutered ? 1.6 : 1.8;
     return active ? f * 1.2 : f;
   }
 
   // Gatos
-  if (stage === 'junior') return ageMonths != null && ageMonths < 4 ? 3.0 : 2.5;
+  if (stage === 'junior') {
+    if (ageMonths == null) return 2.5;
+    if (ageMonths < 4) return 3.0;
+    if (ageMonths < 6) return 2.5;
+    return 2.0;
+  }
   if (lose) return 0.8;
   let f;
-  if (stage === 'senior') f = neutered ? 1.1 : 1.2;
+  if (stage === 'mature') f = neutered ? 1.0 : 1.1;
+  else if (stage === 'senior') f = neutered ? 1.2 : 1.3;
   else f = neutered ? 1.2 : 1.4;
   return active ? f * 1.15 : f;
 }
@@ -229,4 +271,13 @@ export function formatNumber(value, decimals = 0) {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+}
+
+// O valor parece exagerado? (para avisar: peso ou kcal/kg provavelmente errados)
+// Ração seca raramente passa 5% do peso por dia; húmida 15% (gatinhos um pouco mais).
+export function doseLooksHigh(grams, weightKg, type, stage) {
+  const w = parseNumber(weightKg);
+  if (!grams || !w) return false;
+  const limit = (type === 'wet' ? 0.15 : 0.05) * (stage === 'junior' ? 1.4 : 1);
+  return grams / (w * 1000) > limit;
 }

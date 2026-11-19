@@ -12,6 +12,7 @@ import {
   bagDaysLeft,
   describeAnimal,
   neuterQuestion,
+  doseLooksHigh,
   monthsSince,
   withAutoStage,
   ageText,
@@ -38,6 +39,19 @@ test('gato em dieta usa fator 0,8', () => {
 test('dieta não se aplica a júnior', () => {
   const a = dailyKcal({ species: 'cat', weight: 3, stage: 'junior', goal: 'lose' });
   near(a, restingEnergy(3) * 2.5, 0.01);
+});
+
+test('gatinha de 6 meses com 2,5 kg: ×2,0 ≈ 278 kcal, ≈ 70 g de ração seca', () => {
+  const kcal = dailyKcal({ species: 'cat', weight: 2.5, stage: 'junior', ageMonths: 6 });
+  near(kcal, 278, 1);
+  near(gramsPerDay(kcal, 4000), 70, 1);
+  near(dailyKcal({ species: 'cat', weight: 2, stage: 'junior', ageMonths: 3 }), restingEnergy(2) * 3, 0.01);
+});
+
+test('avisa quando a dose parece exagerada', () => {
+  assert.equal(doseLooksHigh(465, 3, 'dry', 'junior'), true);
+  assert.equal(doseLooksHigh(70, 2.5, 'dry', 'junior'), false);
+  assert.equal(doseLooksHigh(300, 2.5, 'wet', 'junior'), false);
 });
 
 test('fases de vida a partir da idade', () => {
@@ -93,4 +107,18 @@ test('idade e fase a partir da data de nascimento', () => {
   assert.equal(ageText(12), '1 ano');
   assert.equal(ageText(26), '2 anos e 2 meses');
   assert.equal(formatBirthDate('2023-03-03'), '3 de março de 2023');
+});
+
+test('fatores por idade (base científica)', () => {
+  const R = restingEnergy(4);
+  const f = (a) => dailyKcal({ species: 'cat', weight: 4, neutered: true, ...a }) / R;
+  near(f({ stage: 'adult' }), 1.2, 0.001);
+  near(f({ stage: 'mature' }), 1.0, 0.001);
+  near(f({ stage: 'senior' }), 1.2, 0.001);
+  near(f({ stage: 'adult', neutered: false }), 1.4, 0.001);
+  const d = (a) => dailyKcal({ species: 'dog', weight: 10, neutered: true, ...a }) / restingEnergy(10);
+  near(d({ stage: 'adult' }), 1.6, 0.001);
+  near(d({ stage: 'junior', ageMonths: 2 }), 3.0, 0.001);
+  near(d({ stage: 'junior', ageMonths: 6 }), 2.0, 0.001);
+  near(d({ stage: 'senior' }), 1.4, 0.001);
 });

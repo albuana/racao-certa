@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Páginas de exemplo dos supermercados (grandes, só para afinar os leitores)
+server/precos/amostras/*.html

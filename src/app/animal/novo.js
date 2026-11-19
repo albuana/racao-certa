@@ -9,6 +9,7 @@ import {
   Avatar,
   Body,
   Button,
+  Chip,
   Field,
   Label,
   OptionGrid,
@@ -19,15 +20,18 @@ import {
   Title,
 } from '../../components/ui';
 import BirthDateField from '../../components/BirthDateField';
+import FeedingPlan from '../../components/FeedingPlan';
+import { planIds, splitPlan } from '../../lib/household';
 import { findProduct } from '../../data/products';
 import { choosePhoto } from '../../lib/photos';
 import {
   DOG_SIZES,
+  HEALTH_CONDITIONS,
   SPECIES,
   dailyKcal,
+  doseLooksHigh,
   describeAnimal,
   formatNumber,
-  gramsPerDay,
   neuterQuestion,
   neuterYesLabel,
   parseNumber,
@@ -47,20 +51,30 @@ export default function AnimalForm() {
 
   const [form, setForm] = useState(() =>
     editing
-      ? { ...editing, weight: editing.weight != null ? String(editing.weight).replace('.', ',') : '' }
+      ? {
+          ...editing,
+          ...(() => {
+            const ids = planIds(editing, customProducts);
+            return { dryProductId: ids.dryId, wetProductId: ids.wetId, productId: null };
+          })(),
+          weight: editing.weight != null ? String(editing.weight).replace('.', ',') : '',
+        }
       : {
           species: params.species === 'dog' ? 'dog' : 'cat',
           name: '',
           weight: '',
           size: 'medium',
           birthDate: null,
+          conditions: [],
           stage: 'adult',
           sex: 'f',
           neutered: true,
           active: false,
           goal: 'keep',
           meals: 2,
-          productId: null,
+          dryProductId: null,
+          wetProductId: null,
+          wetPerDay: 1,
           photoUri: null,
         }
   );
@@ -72,10 +86,13 @@ export default function AnimalForm() {
   useFocusEffect(
     useCallback(() => {
       if (pickedProductId) {
-        setForm((f) => ({ ...f, productId: pickedProductId }));
+        const id = typeof pickedProductId === 'object' ? pickedProductId.id : pickedProductId;
+        const p = findProduct(id, customProducts);
+        const slot = typeof pickedProductId === 'object' ? pickedProductId.slot : p?.type === 'wet' ? 'wet' : 'dry';
+        setForm((f) => ({ ...f, [slot === 'wet' ? 'wetProductId' : 'dryProductId']: id }));
         setPickedProductId(null);
       }
-    }, [pickedProductId, setPickedProductId])
+    }, [pickedProductId, setPickedProductId, customProducts])
   );
 
   // A idade (se for dada) escolhe a fase de vida automaticamente.
@@ -88,9 +105,11 @@ export default function AnimalForm() {
 
   const stages = stagesFor(form.species, form.size);
   const animalForCalc = withAutoStage(form);
-  const product = form.productId ? findProduct(form.productId, customProducts) : null;
+  const dryProduct = form.dryProductId ? findProduct(form.dryProductId, customProducts) : null;
+  const wetProduct = form.wetProductId ? findProduct(form.wetProductId, customProducts) : null;
+  const product = dryProduct || wetProduct;
   const kcal = dailyKcal(animalForCalc);
-  const grams = product ? gramsPerDay(kcal, product.kcalPerKg) : null;
+  const plan = splitPlan({ kcal, dry: dryProduct, wet: wetProduct, wetPerDay: form.wetPerDay ?? 1, meals: form.meals });
   const displayName = form.name.trim() || (isDog ? 'o teu cão' : 'o teu gato');
 
   const errors = useMemo(() => {
@@ -111,16 +130,17 @@ export default function AnimalForm() {
       name: form.name.trim(),
       weight: parseNumber(form.weight),
       stage: animalForCalc.stage,
+      productId: null,
     });
     if (onboarding) router.replace('/inicio');
     else if (editing) router.back();
     else router.replace({ pathname: '/animal/[id]', params: { id } });
   };
 
-  const openPicker = () =>
+  const openPicker = (slot) =>
     router.push({
       pathname: '/racao',
-      params: { species: form.species, stage: animalForCalc.stage, name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
+      params: { slot, species: form.species, stage: animalForCalc.stage, conditions: (form.conditions || []).join(','), name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
     });
 
   return (
@@ -221,6 +241,27 @@ export default function AnimalForm() {
           />
         ) : null}
 
+        {/* Problemas de saúde */}
+        <View>
+          <Label>Problemas de saúde (opcional)</Label>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {HEALTH_CONDITIONS.map((c) => {
+              const on = (form.conditions || []).includes(c.id);
+              return (
+                <Chip
+                  key={c.id}
+                  label={c.label}
+                  active={on}
+                  onPress={() => set({ conditions: on ? form.conditions.filter((x) => x !== c.id) : [...(form.conditions || []), c.id] })}
+                />
+              );
+            })}
+          </View>
+          {(form.conditions || []).length ? (
+            <Body muted size={12} style={{ marginTop: 8 }}>Vamos mostrar primeiro as rações próprias para isto. Segue sempre a dieta indicada pelo veterinário.</Body>
+          ) : null}
+        </View>
+
         {/* Refeições por dia */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, paddingVertical: 6, paddingRight: 6, paddingLeft: 14 }}>
           <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>Refeições por dia</Text>
@@ -231,25 +272,19 @@ export default function AnimalForm() {
           </View>
         </View>
 
-        {/* Ração */}
+        {/* Plano de alimentação: seca e/ou húmida */}
         <View>
-          <Label>Ração</Label>
-          <Pressable
-            onPress={openPicker}
-            accessibilityRole="button"
-            accessibilityLabel={product ? `Ração: ${product.name}. Mudar` : 'Escolher ração'}
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, padding: 14 }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 16, color: product ? colors.text : colors.textMuted }}>
-                {product ? product.name : 'Escolher ração'}
-              </Text>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                {product ? `${formatNumber(product.kcalPerKg)} kcal/kg` : 'Pesquisa ou lê o código de barras'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </Pressable>
+          <Label>Alimentação</Label>
+          <FeedingPlan
+            stats={plan}
+            products={{ dry: dryProduct, wet: wetProduct }}
+            wetPerDay={form.wetPerDay ?? 1}
+            meals={form.meals}
+            onPick={openPicker}
+            onRemove={(slot) => set(slot === 'wet' ? { wetProductId: null } : { dryProductId: null })}
+            onWetChange={(n) => set({ wetPerDay: n })}
+            showCosts={false}
+          />
         </View>
 
         {/* Estimativa */}
@@ -263,13 +298,18 @@ export default function AnimalForm() {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.coralDark }}>
-              {grams ? `${formatNumber(grams)} g` : kcal ? `${formatNumber(kcal)} kcal` : '—'}
+              {kcal ? `${formatNumber(kcal)} kcal` : '—'}
             </Text>
             <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText }}>
-              {grams ? `${formatNumber(grams / form.meals)} g × ${form.meals}` : kcal ? 'escolhe a ração' : 'indica o peso'}
+              {product ? 'por dia' : kcal ? 'escolhe a ração' : 'indica o peso'}
             </Text>
           </View>
         </View>
+        {(plan.dry && doseLooksHigh(plan.dry.grams, form.weight, 'dry', animalForCalc.stage)) || (plan.wet && !plan.dry && doseLooksHigh(plan.wet.grams, form.weight, 'wet', animalForCalc.stage)) ? (
+          <Body size={13} style={{ color: colors.coralDark }}>
+            Este valor parece alto. Confirma o peso ({form.weight} kg) e a energia da ração ({product ? `${formatNumber(product.kcalPerKg)} kcal/kg${product.kcalEstimated ? ', estimada' : ''}` : '—'}).
+          </Body>
+        ) : null}
         <Body muted size={12} style={{ textAlign: 'center' }}>Estimativa de referência. Confirma com o teu veterinário.</Body>
       </Screen>
     </KeyboardAvoidingView>

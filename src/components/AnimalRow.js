@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Text, View } from 'react-native';
-import { animalStats } from '../lib/household';
+import { animalStats, planSummary } from '../lib/household';
 import { describeAnimal, formatNumber, stageLabel, withAutoStage } from '../lib/nutrition';
 import { useStore } from '../store/AppStore';
 import { colors, fonts } from '../theme';
@@ -24,10 +24,10 @@ export default function AnimalRow({ animal: raw }) {
       </View>
       <View style={{ alignItems: 'flex-end' }}>
         <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>
-          {s.grams ? `${formatNumber(s.grams)} g` : '—'}
+          {s.dry || s.wet ? planSummary(s, formatNumber) : '—'}
         </Text>
         <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-          {s.grams ? 'por dia' : 'sem ração'}
+          {s.dry || s.wet ? 'por dia' : 'sem ração'}
         </Text>
       </View>
     </Card>

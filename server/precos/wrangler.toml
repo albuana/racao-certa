@@ -1,0 +1,10 @@
+name = "racao-certa-precos"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+# Preços vistos nas lojas pelos utilizadores (Lidl, Aldi, Mercadona…).
+# 1) npx wrangler kv namespace create PRECOS
+# 2) Tira o "#" das 3 linhas abaixo e cola o id que apareceu.
+[[kv_namespaces]]
+binding = "PRECOS"
+id = "490303d2bff74ef99506ba0f7de36185"

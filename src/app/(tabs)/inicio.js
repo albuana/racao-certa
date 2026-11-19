@@ -38,8 +38,8 @@ export default function Inicio() {
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <NavyStat label="Comem por dia" value={`${formatNumber(totals.gramsDay)} g`} />
-          <NavyStat label="Por mês" value={`${formatNumber(totals.kgMonth, 1)} kg`} />
+          <NavyStat label="Energia por dia" value={`${formatNumber(totals.kcalDay)} kcal`} />
+          <NavyStat label="Animais" value={`${animals.length}`} />
         </View>
         {totals.missingPrice ? (
           <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.onNavyMuted }}>Há animais sem ração ou sem preço, não entram no custo.</Text>
