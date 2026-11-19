@@ -1,9 +1,10 @@
 // Junta o animal, a ração e os preços: dose, custo e dias até acabar o saco.
 
 import { findProduct } from '../data/products';
-import { bagDaysLeft, cheapestOffer, costPerDay, dailyKcal, gramsPerDay } from './nutrition';
+import { bagDaysLeft, cheapestOffer, costPerDay, dailyKcal, gramsPerDay, withAutoStage } from './nutrition';
 
-export function animalStats(animal, customProducts = []) {
+export function animalStats(rawAnimal, customProducts = []) {
+  const animal = withAutoStage(rawAnimal);
   const product = animal.productId ? findProduct(animal.productId, customProducts) : null;
   const kcal = dailyKcal(animal);
   const grams = product ? gramsPerDay(kcal, product.kcalPerKg) : null;

@@ -12,7 +12,8 @@ Feita com **Expo SDK 58 / React Native**, em **JavaScript** (sem TypeScript).
 - **Casa:** nome da casa (passo 1 de 3).
 - **Animal:** gato ou cão (passo 2), depois o formulário (passo 3):
   - foto (câmara ou galeria), nome, peso;
-  - porte (cães), **fase de vida** (Júnior, Adulto, Maduro, Sénior) com os intervalos de idade; se indicares a idade, a fase é escolhida sozinha;
+  - porte (cães), **fase de vida** (Júnior, Adulto, Maduro, Sénior) com os intervalos de idade;
+  - “Sabes a data de nascimento?”: com a data, a fase é escolhida sozinha e atualiza-se com o tempo (um júnior passa a adulto quando faz a idade);
   - sexo e **castrado / esterilizada** (a pergunta muda conforme macho ou fêmea);
   - estilo de vida, objetivo (manter ou perder peso), refeições por dia;
   - ração e estimativa da dose em tempo real.

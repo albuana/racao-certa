@@ -18,12 +18,12 @@ import {
   BackButton,
   Title,
 } from '../../components/ui';
+import BirthDateField from '../../components/BirthDateField';
 import { findProduct } from '../../data/products';
 import { choosePhoto } from '../../lib/photos';
 import {
   DOG_SIZES,
   SPECIES,
-  ageInMonths,
   dailyKcal,
   describeAnimal,
   formatNumber,
@@ -31,7 +31,9 @@ import {
   neuterQuestion,
   neuterYesLabel,
   parseNumber,
+  monthsSince,
   stageFromAge,
+  withAutoStage,
   stagesFor,
 } from '../../lib/nutrition';
 import { useStore } from '../../store/AppStore';
@@ -51,8 +53,7 @@ export default function AnimalForm() {
           name: '',
           weight: '',
           size: 'medium',
-          years: '',
-          months: '',
+          birthDate: null,
           stage: 'adult',
           sex: 'f',
           neutered: true,
@@ -78,16 +79,15 @@ export default function AnimalForm() {
   );
 
   // A idade (se for dada) escolhe a fase de vida automaticamente.
-  const onAge = (patch) => {
+  // A data de nascimento (se for dada) escolhe a fase de vida automaticamente.
+  const onBirth = (patch) => {
     const next = { ...form, ...patch };
-    const months = ageInMonths(next.years, next.months);
-    const auto = stageFromAge(next.species, next.size, months);
+    const auto = next.birthDate ? stageFromAge(next.species, next.size, monthsSince(next.birthDate)) : null;
     set({ ...patch, ...(auto ? { stage: auto } : {}) });
   };
 
   const stages = stagesFor(form.species, form.size);
-  const ageMonths = ageInMonths(form.years, form.months);
-  const animalForCalc = { ...form, ageMonths };
+  const animalForCalc = withAutoStage(form);
   const product = form.productId ? findProduct(form.productId, customProducts) : null;
   const kcal = dailyKcal(animalForCalc);
   const grams = product ? gramsPerDay(kcal, product.kcalPerKg) : null;
@@ -110,7 +110,7 @@ export default function AnimalForm() {
       ...form,
       name: form.name.trim(),
       weight: parseNumber(form.weight),
-      ageMonths,
+      stage: animalForCalc.stage,
     });
     if (onboarding) router.replace('/inicio');
     else if (editing) router.back();
@@ -120,7 +120,7 @@ export default function AnimalForm() {
   const openPicker = () =>
     router.push({
       pathname: '/racao',
-      params: { species: form.species, stage: form.stage, name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
+      params: { species: form.species, stage: animalForCalc.stage, name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
     });
 
   return (
@@ -164,23 +164,25 @@ export default function AnimalForm() {
           <OptionGrid
             label="Porte"
             value={form.size}
-            onChange={(size) => onAge({ size })}
+            onChange={(size) => onBirth({ size })}
             options={DOG_SIZES.map((s) => ({ value: s.id, label: s.label, hint: s.hint }))}
           />
         ) : null}
 
         <View>
+          <BirthDateField
+            value={form.birthDate}
+            onChange={(birthDate) => onBirth({ birthDate })}
+            stageName={stages.find((x) => x.id === animalForCalc.stage)?.label}
+          />
+          <View style={{ height: 14 }} />
           <OptionGrid
-            label="Fase de vida"
-            value={form.stage}
+            label={form.birthDate ? 'Fase de vida (pela data de nascimento)' : 'Fase de vida'}
+            disabled={!!form.birthDate}
+            value={animalForCalc.stage}
             onChange={(stage) => set({ stage })}
             options={stages.map((s) => ({ value: s.id, label: s.label, hint: s.range }))}
           />
-          <Body muted size={13} style={{ marginTop: 12 }}>Sabes a idade? Escolhemos a fase por ti (opcional).</Body>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-            <Field style={{ flex: 1 }} label="Anos" value={form.years} onChangeText={(years) => onAge({ years })} placeholder="—" keyboardType="number-pad" maxLength={2} />
-            <Field style={{ flex: 1 }} label="Meses" value={form.months} onChangeText={(months) => onAge({ months })} placeholder="—" keyboardType="number-pad" maxLength={2} />
-          </View>
         </View>
 
         <Segmented
@@ -207,7 +209,7 @@ export default function AnimalForm() {
           onChange={(active) => set({ active })}
           options={isDog ? [{ value: false, label: 'Calmo' }, { value: true, label: 'Muito ativo' }] : [{ value: false, label: 'Interior' }, { value: true, label: 'Vai à rua' }]}
         />
-        {form.stage !== 'junior' ? (
+        {animalForCalc.stage !== 'junior' ? (
           <Segmented
             label="Objetivo"
             value={form.goal}
@@ -255,7 +257,7 @@ export default function AnimalForm() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.coralTintText }}>Estimativa para {displayName}</Text>
             <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText, marginTop: 2 }}>
-              {[female ? 'Fêmea' : 'Macho', describeAnimal(form)].filter(Boolean).join(' ')}
+              {[female ? 'Fêmea' : 'Macho', describeAnimal(animalForCalc)].filter(Boolean).join(' ')}
               {kcal ? ` · ≈ ${formatNumber(kcal)} kcal/dia` : ''}
             </Text>
           </View>

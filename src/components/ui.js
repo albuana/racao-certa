@@ -130,7 +130,7 @@ export function Segmented({ options, value, onChange, label }) {
 }
 
 // Grelha de opções com título e subtítulo (ex.: fases de vida).
-export function OptionGrid({ options, value, onChange, label, columns = 2 }) {
+export function OptionGrid({ options, value, onChange, label, columns = 2, disabled }) {
   return (
     <View>
       {label ? <Label>{label}</Label> : null}
@@ -141,9 +141,10 @@ export function OptionGrid({ options, value, onChange, label, columns = 2 }) {
             <Pressable
               key={o.value}
               onPress={() => onChange(o.value)}
+              disabled={disabled}
               accessibilityRole="radio"
-              accessibilityState={{ selected: on }}
-              style={[styles.option, { width: columns === 2 ? '48.5%' : '100%' }, on && styles.optionOn]}
+              accessibilityState={{ selected: on, disabled: !!disabled }}
+              style={[styles.option, { width: columns === 2 ? '48.5%' : '100%' }, on && styles.optionOn, disabled && !on && { opacity: 0.45 }]}
             >
               <Text style={[styles.optionTitle, on && { color: colors.navy }]}>{o.label}</Text>
               {o.hint ? <Text style={[styles.optionHint, on && { color: colors.coralTintText }]}>{o.hint}</Text> : null}

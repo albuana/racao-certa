@@ -3,7 +3,7 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { Avatar, BackButton, Body, Button, Card, Screen, Stat, Title } from '../../components/ui';
 import { animalStats } from '../../lib/household';
-import { formatEuro, formatNumber, neuterYesLabel, stageLabel } from '../../lib/nutrition';
+import { ageText, formatEuro, formatNumber, neuterYesLabel, stageLabel, withAutoStage } from '../../lib/nutrition';
 import { choosePhoto } from '../../lib/photos';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
@@ -11,13 +11,15 @@ import { colors, fonts } from '../../theme';
 export default function AnimalDetail() {
   const { id } = useLocalSearchParams();
   const { animals, customProducts, saveAnimal, removeAnimal, openBag } = useStore();
-  const animal = animals.find((a) => a.id === id);
-  if (!animal) return <Redirect href="/inicio" />;
+  const stored = animals.find((a) => a.id === id);
+  if (!stored) return <Redirect href="/inicio" />;
+  const animal = withAutoStage(stored);
 
   const s = animalStats(animal, customProducts);
   const female = animal.sex === 'f';
   const chips = [
     `${formatNumber(animal.weight, 1)} kg`,
+    animal.birthDate ? ageText(animal.ageMonths) : null,
     stageLabel(animal),
     female ? 'Fêmea' : 'Macho',
     animal.neutered ? neuterYesLabel(animal.sex).replace('Sim, ', '').replace(/^./, (c) => c.toUpperCase()) : null,
@@ -65,8 +67,8 @@ export default function AnimalDetail() {
           <Pressable
             onPress={() =>
               choosePhoto(
-                (uri) => saveAnimal({ ...animal, photoUri: uri }),
-                animal.photoUri ? () => saveAnimal({ ...animal, photoUri: null }) : undefined
+                (uri) => saveAnimal({ ...stored, photoUri: uri }),
+                stored.photoUri ? () => saveAnimal({ ...stored, photoUri: null }) : undefined
               )
             }
             accessibilityRole="button"

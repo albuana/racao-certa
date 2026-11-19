@@ -32,9 +32,7 @@ function RootStack() {
   if (!done) return null;
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-      <Stack.Screen name="racao" options={{ presentation: 'modal' }} />
-    </Stack>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
   );
 }
 

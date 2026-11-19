@@ -12,6 +12,10 @@ import {
   bagDaysLeft,
   describeAnimal,
   neuterQuestion,
+  monthsSince,
+  withAutoStage,
+  ageText,
+  formatBirthDate,
 } from './nutrition.js';
 
 const near = (a, b, tol = 0.5) => assert.ok(Math.abs(a - b) <= tol, `${a} ≈ ${b}`);
@@ -72,4 +76,21 @@ test('descrição com concordância de género', () => {
   assert.equal(describeAnimal({ sex: 'm', stage: 'mature', neutered: true }), 'maduro · castrado');
   assert.equal(neuterQuestion('f'), 'Esterilizada?');
   assert.equal(neuterQuestion('m'), 'Castrado?');
+});
+
+test('idade e fase a partir da data de nascimento', () => {
+  const now = new Date(2026, 10, 18); // 18 nov 2026
+  assert.equal(monthsSince('2026-03-18', now), 8);
+  assert.equal(monthsSince('2026-03-19', now), 7);
+  assert.equal(monthsSince('2025-11-18', now), 12);
+  const kitten = withAutoStage({ species: 'cat', birthDate: '2026-03-18', stage: 'adult' }, now);
+  assert.equal(kitten.stage, 'junior');
+  assert.equal(kitten.ageMonths, 8);
+  // um ano depois já é adulto, sem mexer em nada
+  assert.equal(withAutoStage({ species: 'cat', birthDate: '2025-11-01' }, now).stage, 'adult');
+  assert.equal(withAutoStage({ species: 'cat', stage: 'senior' }, now).stage, 'senior');
+  assert.equal(ageText(8), '8 meses');
+  assert.equal(ageText(12), '1 ano');
+  assert.equal(ageText(26), '2 anos e 2 meses');
+  assert.equal(formatBirthDate('2023-03-03'), '3 de março de 2023');
 });

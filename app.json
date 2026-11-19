@@ -50,7 +50,8 @@
           "cameraPermission": "A Ração Certa usa a câmara para ler o código de barras do saco de ração.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

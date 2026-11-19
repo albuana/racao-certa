@@ -72,6 +72,49 @@ export function stageFromAge(species, size, ageMonths) {
   return found ? found.id : null;
 }
 
+// Meses completos desde a data de nascimento (ISO "AAAA-MM-DD").
+export function monthsSince(birthDate, now = new Date()) {
+  if (!birthDate) return null;
+  const [y, m, d] = String(birthDate).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  let months = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+  if (now.getDate() < d) months -= 1;
+  return Math.max(0, months);
+}
+
+// Se o animal tem data de nascimento, a idade e a fase de vida são calculadas
+// a partir dela (e atualizam-se sozinhas com o tempo).
+export function withAutoStage(animal, now = new Date()) {
+  if (!animal || !animal.birthDate) return animal;
+  const ageMonths = monthsSince(animal.birthDate, now);
+  const stage = stageFromAge(animal.species, animal.size, ageMonths) || animal.stage;
+  return { ...animal, ageMonths, stage };
+}
+
+export function ageText(ageMonths) {
+  if (ageMonths == null) return '';
+  const y = Math.floor(ageMonths / 12);
+  const m = ageMonths % 12;
+  const parts = [];
+  if (y) parts.push(`${y} ${y === 1 ? 'ano' : 'anos'}`);
+  if (m || !y) parts.push(`${m} ${m === 1 ? 'mês' : 'meses'}`);
+  return parts.join(' e ');
+}
+
+const MONTHS_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+export function formatBirthDate(birthDate) {
+  if (!birthDate) return '';
+  const [y, m, d] = String(birthDate).slice(0, 10).split('-').map(Number);
+  return `${d} de ${MONTHS_PT[m - 1]} de ${y}`;
+}
+
+// Date → "AAAA-MM-DD" na hora local (sem problemas de fuso horário).
+export function toISODate(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function ageInMonths(years, months) {
   const y = parseNumber(years);
   const m = parseNumber(months);
