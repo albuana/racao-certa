@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { formatEuro } from './nutrition';
 import { notifyNow } from './notify';
-import { addHistory, findSame, searchEnabled, searchStores } from './search';
+import { addHistory, cleanHistory, findSame, searchEnabled, searchStores } from './search';
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
@@ -15,7 +15,8 @@ export function useFavoritePrices(favorites, updateFavorite) {
   const refresh = useCallback(
     async (force = false) => {
       if (!searchEnabled || running.current || !favorites?.length) return;
-      const due = favorites.filter((f) => force || !f.checkedAt || Date.now() - new Date(f.checkedAt).getTime() > SIX_HOURS);
+      // v2 = depois de tirarmos as lojas desconhecidas: as favoritas antigas atualizam logo.
+      const due = favorites.filter((f) => force || f.v !== 2 || !f.checkedAt || Date.now() - new Date(f.checkedAt).getTime() > SIX_HOURS);
       if (!due.length) return;
       running.current = true;
       setRefreshing(true);
@@ -25,7 +26,7 @@ export function useFavoritePrices(favorites, updateFavorite) {
             const groups = await searchStores(fav.query, { type: fav.type, species: fav.species });
             const same = findSame(groups, fav);
             if (!same) {
-              updateFavorite(fav.key, { checkedAt: new Date().toISOString() });
+              updateFavorite(fav.key, { checkedAt: new Date().toISOString(), v: 2, history: cleanHistory(fav.history), best: null, offers: [] });
               continue;
             }
             const best = { price: same.best.price, unitValue: same.best.unitValue, store: same.best.store, link: same.best.link };
@@ -33,8 +34,9 @@ export function useFavoritePrices(favorites, updateFavorite) {
               best,
               offers: same.offers.slice(0, 8).map((o) => ({ store: o.store, price: o.price, unitValue: o.unitValue, link: o.link, desde: o.desde })),
               image: fav.image || same.image,
-              history: addHistory(fav.history, best.unitValue, best.store),
+              history: addHistory(cleanHistory(fav.history), best.unitValue, best.store),
               checkedAt: new Date().toISOString(),
+              v: 2,
             };
             // 🔔 Alerta: avisa uma vez por cada preço novo abaixo do alvo.
             if (fav.target && best.unitValue <= fav.target && fav.notifiedPrice !== best.unitValue) {

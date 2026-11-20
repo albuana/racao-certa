@@ -55,6 +55,8 @@ export default function RacaoPicker() {
   // rações da app e resultados da pesquisa.
   const productConditions = (p) => (p.conditions?.length ? p.conditions : inferConditions(`${p.name} ${(p.tags || []).join(' ')}`));
   const matchesFilters = (p) => {
+    // Animal sem problemas de saúde: dietas veterinárias (renal, urinário, …) não aparecem, a não ser que se procure pelo nome.
+    if (!animalConditions.length && !conds.length && !trimmed && productConditions(p).length) return false;
     if (conds.length) {
       // Dietas para problemas de saúde: a idade não conta.
       const pc = productConditions(p);
@@ -85,6 +87,8 @@ export default function RacaoPicker() {
   const marketLoading = livePricesEnabled && market.key !== marketKey;
   const marketItems = (market.key === marketKey ? market.items : [])
     .filter((m) => !trimmed || `${m.brand} ${m.name}`.toLowerCase().includes(trimmed.toLowerCase()))
+    // Sem problemas de saúde na ficha: nada de dietas veterinárias.
+    .filter((m) => animalConditions.length || conds.length || !inferConditions(`${m.brand || ''} ${m.name}`).length)
     .map((m) => {
       const kcalKg = typicalKcalPerKg({ type: m.type || type || 'dry', name: m.name, stage });
       const g = kcal ? kcal / (kcalKg / 1000) : null;
@@ -292,16 +296,19 @@ export default function RacaoPicker() {
         <Chip label="Húmida" active={type === 'wet'} onPress={() => setType((t) => (t === 'wet' ? null : 'wet'))} />
       </View>
 
+      {/* Só aparece se o animal tiver problemas de saúde na ficha (e só esses). */}
+      {animalConditions.length ? (
       <View style={{ gap: 6 }}>
-        <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted }}>Problema de saúde</Text>
+        <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted }}>Problema de saúde de {name}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
-          {HEALTH_CONDITIONS.map((c) => {
+          {HEALTH_CONDITIONS.filter((c) => animalConditions.includes(c.id)).map((c) => {
             const on = conds.includes(c.id);
             return <Chip key={c.id} label={c.label} active={on} onPress={() => setConds((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))} />;
           })}
         </ScrollView>
         {conds.length ? <Body muted size={12}>Rações para {conds.map((c) => HEALTH_CONDITIONS.find((h) => h.id === c)?.label.toLowerCase()).join(' e ')}, para qualquer idade. Segue a indicação do veterinário.</Body> : null}
       </View>
+      ) : null}
 
       <Segmented
         value={sort}
@@ -369,7 +376,7 @@ export default function RacaoPicker() {
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>{m.name}</Text>
                   <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                    {m.store} · {formatNumber(m.kg, m.kg % 1 ? 1 : 0)} kg · {formatEuro(m.price)} · {formatEuro(m.perKg)}/kg
+                    {m.store} · {m.kg && !m.desde ? `${formatNumber(m.kg, m.kg % 1 ? 1 : 0)} kg` : 'vários tamanhos'} · {m.desde ? 'desde ' : ''}{formatEuro(m.price)} · {formatEuro(m.perKg)}/kg
                   </Text>
                   {m.perDay != null ? <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.coralDark, marginTop: 4 }}>{formatEuro(m.perDay)}/dia</Text> : null}
                 </View>

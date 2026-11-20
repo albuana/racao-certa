@@ -209,12 +209,18 @@ export function addHistory(history = [], price, store, day = new Date().toISOStr
   return [...list, entry].sort((a, b) => a.d.localeCompare(b.d)).slice(-120);
 }
 
-// "Preço errado?": avisa o servidor; a oferta deixa de aparecer para toda a gente.
-export async function reportWrongPrice(offer) {
-  if (!API_URL) return;
-  await fetch(`${API_URL}/precos/erro`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(TOKEN ? { 'x-app-token': TOKEN } : {}) },
-    body: JSON.stringify({ store: offer.store, name: offer.name, price: offer.price, link: offer.link || '' }),
-  });
+// Lojas em que confiamos (as mesmas do servidor). Serve para limpar dados guardados antes.
+export const KNOWN_STORES = [
+  'Continente', 'Auchan', 'Pingo Doce', 'Intermarché', 'Mercadona', 'El Corte Inglés', 'Lidl', 'Minipreço', 'Aldi',
+  'Zooplus', 'Kiwoko', 'Tiendanimal', 'Bitiba', 'Miscota', 'Worten', 'Amazon', 'ZU', 'Maxi Zoo', 'Goldpet', 'Petness',
+  'Animalis', 'Petlove', 'Clinicalvet', 'Mundo Animal',
+];
+
+// Tira ofertas de lojas desconhecidas e links que abrem o Google em vez da loja.
+export function cleanOffers(offers = []) {
+  return offers.filter((o) => KNOWN_STORES.includes(o.store) && !(o.link && /google\./i.test(o.link)));
+}
+
+export function cleanHistory(history = []) {
+  return history.filter((h) => !h.store || KNOWN_STORES.includes(h.store));
 }

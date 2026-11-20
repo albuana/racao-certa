@@ -4,13 +4,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import PriceChart from '../components/PriceChart';
 import ProductCard, { priceLabel, sizeText } from '../components/ProductCard';
 import { BackButton, Body, Button, Card, Screen, Title, styles as ui } from '../components/ui';
 import { allowNotifications } from '../lib/notify';
 import { formatEuro, parseNumber } from '../lib/nutrition';
-import { getGroup, reportWrongPrice, searchStores } from '../lib/search';
+import { cleanOffers, getGroup, searchStores } from '../lib/search';
 import { useStore } from '../store/AppStore';
 import { colors, fonts } from '../theme';
 
@@ -42,26 +42,13 @@ export default function Produto() {
     const fromSearch = getGroup(key);
     if (fromSearch) return fromSearch;
     if (!fav) return null;
-    const offers = (fav.offers || (fav.best ? [fav.best] : [])).map((o) => ({ ...o, unitValue: o.unitValue ?? o.price }));
+    const offers = cleanOffers(fav.offers || (fav.best ? [fav.best] : [])).map((o) => ({ ...o, unitValue: o.unitValue ?? o.price }));
     return { key: fav.key, name: fav.name, brand: fav.brand, image: fav.image, type: fav.type, species: fav.species, kg: fav.kg, offers, best: offers[0] || null, pack: null };
   });
 
   const [target, setTarget] = useState(fav?.target ? String(fav.target).replace('.', ',') : '');
   const [alts, setAlts] = useState(null);
-  const [hidden, setHidden] = useState([]); // ofertas marcadas como erradas neste ecrã
 
-  const reportOffer = (o) =>
-    Alert.alert('Preço errado?', `${o.store}: ${formatEuro(o.price)}. Vamos esconder este preço para toda a gente até ser verificado.`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Está errado',
-        style: 'destructive',
-        onPress: () => {
-          setHidden((h) => [...h, `${o.store}|${o.price}`]);
-          reportWrongPrice(o).catch(() => {});
-        },
-      },
-    ]);
 
   // 💡 Alternativas: o mesmo animal, o mesmo tipo e a mesma fase, mais baratas por kg.
   useEffect(() => {
@@ -150,9 +137,9 @@ export default function Produto() {
       {/* Todas as lojas */}
       <Text style={{ fontFamily: fonts.displaySemi, fontSize: 19, color: colors.text }}>Em todas as lojas</Text>
       <View style={{ gap: 8 }}>
-        {group.offers.filter((o) => !hidden.includes(`${o.store}|${o.price}`)).map((o, i) => (
-          <View key={`${o.store}-${i}`} style={{ gap: 2 }}>
+        {group.offers.map((o, i) => (
           <Pressable
+            key={`${o.store}-${i}`}
             onPress={() => o.link && Linking.openURL(o.link)}
             disabled={!o.link}
             accessibilityRole="link"
@@ -179,10 +166,6 @@ export default function Produto() {
             </Text>
             {o.link ? <Ionicons name="open-outline" size={16} color={colors.textMuted} /> : null}
           </Pressable>
-          <Pressable onPress={() => reportOffer(o)} accessibilityRole="button" accessibilityLabel={`Preço errado na ${o.store}?`} hitSlop={6} style={{ alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 6 }}>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' }}>Preço errado?</Text>
-          </Pressable>
-          </View>
         ))}
       </View>
 
