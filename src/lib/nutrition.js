@@ -109,6 +109,25 @@ export function withAutoStage(animal, now = new Date()) {
   return { ...animal, ageMonths, stage };
 }
 
+// Refeições por dia recomendadas (WSAVA / AAHA): dependem da idade, e nos cães grandes de peito fundo
+// convém dividir em mais refeições (menos risco de torção gástrica). A quantidade do dia não muda.
+export function recommendedMeals(rawAnimal) {
+  const a = withAutoStage(rawAnimal || {});
+  const m = a.ageMonths;
+  const bigDog = a.species === 'dog' && (a.size === 'large' || a.size === 'giant');
+  if (a.species === 'dog') {
+    if (m != null && m < 3) return { value: 4, min: 4, max: 4, reason: 'Cachorros até aos 3 meses: 4 refeições por dia.' };
+    if ((m != null && m < 6) || (m == null && a.stage === 'junior')) return { value: 3, min: 3, max: 3, reason: 'Cachorros dos 3 aos 6 meses: 3 refeições por dia.' };
+    if (m != null && m < 12) return { value: 2, min: 2, max: bigDog ? 3 : 2, reason: 'Dos 6 aos 12 meses: 2 refeições por dia.' };
+    if (bigDog) return { value: 2, min: 2, max: 3, reason: 'Cães grandes: 2 a 3 refeições e sem exercício intenso logo a seguir (menos risco de torção gástrica).' };
+    return { value: 2, min: 2, max: 2, reason: 'Cães adultos: 2 refeições por dia.' };
+  }
+  if ((m != null && m < 6) || (m == null && a.stage === 'junior')) return { value: 3, min: 3, max: 4, reason: 'Gatinhos até aos 6 meses: 3 a 4 refeições por dia (estômago pequeno, crescem depressa).' };
+  if (m != null && m < 12) return { value: 2, min: 2, max: 3, reason: 'Gatos dos 6 aos 12 meses: 2 a 3 refeições por dia.' };
+  if (a.stage === 'senior' || a.stage === 'mature') return { value: 2, min: 2, max: 3, reason: 'Gatos mais velhos: 2 a 3 porções pequenas por dia.' };
+  return { value: 2, min: 2, max: 4, reason: 'Gatos adultos: pelo menos 2; várias porções pequenas também são boas.' };
+}
+
 export function ageText(ageMonths) {
   if (ageMonths == null) return '';
   const y = Math.floor(ageMonths / 12);

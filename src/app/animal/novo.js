@@ -38,6 +38,7 @@ import {
   neuterQuestion,
   neuterYesLabel,
   parseNumber,
+  recommendedMeals,
   monthsSince,
   stageFromAge,
   withAutoStage,
@@ -82,6 +83,8 @@ export default function AnimalForm() {
         }
   );
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  // Refeições: segue a recomendação (idade, porte) até a pessoa mudar à mão.
+  const [mealsTouched, setMealsTouched] = useState(!!editing);
   const isDog = form.species === 'dog';
   const female = form.sex === 'f';
 
@@ -108,11 +111,13 @@ export default function AnimalForm() {
 
   const stages = stagesFor(form.species, form.size);
   const animalForCalc = withAutoStage(form);
+  const rec = recommendedMeals(form);
+  const meals = mealsTouched ? form.meals : rec.value;
   const dryProduct = form.dryProductId ? findProduct(form.dryProductId, customProducts) : null;
   const wetProduct = form.wetProductId ? findProduct(form.wetProductId, customProducts) : null;
   const product = dryProduct || wetProduct;
   const kcal = dailyKcal(animalForCalc);
-  const plan = splitPlan({ kcal, dry: dryProduct, wet: wetProduct, wetPerDay: form.wetPerDay ?? 1, meals: form.meals });
+  const plan = splitPlan({ kcal, dry: dryProduct, wet: wetProduct, wetPerDay: form.wetPerDay ?? 1, meals });
   const displayName = form.name.trim() || (isDog ? 'o teu cão' : 'o teu gato');
 
   const errors = useMemo(() => {
@@ -136,6 +141,7 @@ export default function AnimalForm() {
     const id = saveAnimal({
       ...form,
       weighIns,
+      meals,
       createdAt: form.createdAt || new Date().toISOString(),
       name: form.name.trim(),
       weight: kgNow,
@@ -321,13 +327,26 @@ export default function AnimalForm() {
           ) : null}
         </View>
 
-        {/* Refeições por dia */}
+        {/* Refeições por dia (recomendação ao lado, como curiosidade) */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, paddingVertical: 6, paddingRight: 6, paddingLeft: 14 }}>
           <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>Refeições por dia</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <StepperButton icon="remove" label="Menos uma refeição" onPress={() => set({ meals: Math.max(1, form.meals - 1) })} />
-            <Text style={{ width: 28, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>{form.meals}</Text>
-            <StepperButton icon="add" label="Mais uma refeição" onPress={() => set({ meals: Math.min(6, form.meals + 1) })} />
+            <StepperButton icon="remove" label="Menos uma refeição" onPress={() => { setMealsTouched(true); set({ meals: Math.max(1, meals - 1) }); }} />
+            <Text style={{ width: 28, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>{meals}</Text>
+            <StepperButton icon="add" label="Mais uma refeição" onPress={() => { setMealsTouched(true); set({ meals: Math.min(6, meals + 1) }); }} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, backgroundColor: colors.coralTint, borderRadius: 12, padding: 12, marginTop: -6 }}>
+          <Text style={{ fontSize: 15 }}>💡</Text>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.coralTintText }}>
+              {rec.reason}
+            </Text>
+            {meals < rec.min || meals > rec.max ? (
+              <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText }}>
+                Escolheste {meals}. A quantidade do dia é a mesma; só muda a forma como se divide.
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -338,7 +357,7 @@ export default function AnimalForm() {
             stats={plan}
             products={{ dry: dryProduct, wet: wetProduct }}
             wetPerDay={form.wetPerDay ?? 1}
-            meals={form.meals}
+            meals={meals}
             onPick={openPicker}
             onRemove={(slot) => set(slot === 'wet' ? { wetProductId: null } : { dryProductId: null })}
             onWetChange={(n) => set({ wetPerDay: n })}

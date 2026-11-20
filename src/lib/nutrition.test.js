@@ -122,3 +122,12 @@ test('fatores por idade (base científica)', () => {
   near(d({ stage: 'junior', ageMonths: 6 }), 2.0, 0.001);
   near(d({ stage: 'senior' }), 1.4, 0.001);
 });
+
+test('refeições recomendadas pela idade', async () => {
+  const { recommendedMeals } = await import('./nutrition.js');
+  const monthsAgo = (n) => { const d = new Date(); d.setMonth(d.getMonth() - n); return d.toISOString().slice(0, 10); };
+  assert.equal(recommendedMeals({ species: 'cat', birthDate: monthsAgo(3) }).value, 3);
+  assert.equal(recommendedMeals({ species: 'cat', birthDate: monthsAgo(8) }).value, 2);
+  assert.equal(recommendedMeals({ species: 'dog', birthDate: monthsAgo(2), size: 'medium' }).value, 4);
+  assert.equal(recommendedMeals({ species: 'dog', stage: 'adult', size: 'giant' }).max, 3);
+});
