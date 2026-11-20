@@ -110,9 +110,6 @@ export default function AnimalDetail() {
     <Screen>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <BackButton />
-        <Pressable onPress={() => router.push({ pathname: '/animal/novo', params: { id: animal.id } })} accessibilityRole="button" style={{ padding: 10 }}>
-          <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.navy }}>Editar</Text>
-        </Pressable>
       </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
