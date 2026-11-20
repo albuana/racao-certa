@@ -150,7 +150,7 @@ export default function AnimalForm() {
   const openPicker = (slot) =>
     router.push({
       pathname: '/racao',
-      params: { slot, species: form.species, stage: animalForCalc.stage, conditions: (form.conditions || []).join(','), name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
+      params: { slot, animalId: editing?.id || '', species: form.species, stage: animalForCalc.stage, conditions: (form.conditions || []).join(','), name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
     });
 
   return (

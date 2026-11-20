@@ -67,7 +67,7 @@ export default function AnimalDetail() {
   const openPicker = (slot) =>
     router.push({
       pathname: '/racao',
-      params: { slot: slot || (dryP ? 'wet' : 'dry'), species: animal.species, stage: animal.stage, conditions: (animal.conditions || []).join(','), name: animal.name, kcal: s.kcal ? String(Math.round(s.kcal)) : '' },
+      params: { slot: slot || (dryP ? 'wet' : 'dry'), animalId: animal.id, species: animal.species, stage: animal.stage, conditions: (animal.conditions || []).join(','), name: animal.name, kcal: s.kcal ? String(Math.round(s.kcal)) : '' },
     });
   const female = animal.sex === 'f';
   const chips = [

@@ -1,18 +1,18 @@
-// Seletor de ração: pesquisa, código de barras (procura o produto real nas
-// bases abertas), sugestões por custo/dia e adicionar à mão.
-// Devolve a escolha ao formulário via store.pickedProductId.
-
+// Escolher a ração de um animal: opções com preço em todas as lojas (da mais barata por dia)
+// e, fechado, o que o animal já experimentou com a nota 👍/👎.
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { BackButton, Body, Button, Chip, Field, Screen, Segmented, Title, styles as ui } from '../components/ui';
-import { findByEan, productsFor } from '../data/products';
-import { ensureEnergy, inferConditions, inferStages, inferStagesFor, typicalKcalPerKg, lookupBarcode, priceSearchUrl, searchProducts } from '../lib/lookup';
-import { HEALTH_CONDITIONS, cheapestOffer, costPerDay, formatEuro, formatNumber, gramsPerDay, parseNumber, pricePerKg, stagesFor } from '../lib/nutrition';
-import { fetchLivePrices, fetchSuggestions, livePricesEnabled } from '../lib/prices';
 import Scanner from '../components/Scanner';
+import { BackButton, Body, Button, Chip, Field, Screen, Title, styles as ui } from '../components/ui';
+import { findByEan, findProduct } from '../data/products';
+import { inferConditions, inferStagesFor, lookupBarcode, priceSearchUrl, typicalKcalPerKg } from '../lib/lookup';
+import { HEALTH_CONDITIONS, cheapestOffer, formatEuro, formatNumber, parseNumber, stagesFor } from '../lib/nutrition';
+import { fetchSuggestions } from '../lib/prices';
+import { planIds } from '../lib/household';
+import { groupResults, searchStores } from '../lib/search';
 import { useStore } from '../store/AppStore';
 import { colors, fonts } from '../theme';
 
@@ -21,96 +21,102 @@ export default function RacaoPicker() {
   const species = params.species === 'dog' ? 'dog' : 'cat';
   const stage = params.stage || null;
   const kcal = parseNumber(params.kcal);
-  const name = params.name || (species === 'dog' ? 'o teu cão' : 'o teu gato');
-  const { customProducts, setPickedProductId, addCustomProduct, updateProductOffers } = useStore();
-
-  const [query, setQuery] = useState('');
+  const animalId = params.animalId || null;
+  const who = params.name || (species === 'dog' ? 'o teu cão' : 'o teu gato');
+  const { animals, customProducts, setPickedProductId, addCustomProduct, recordFood, rateFood } = useStore();
+  const animal = animalId ? animals.find((a) => a.id === animalId) : null;
   const animalConditions = String(params.conditions || '').split(',').filter(Boolean);
-  const [conds, setConds] = useState(animalConditions); // problemas de saúde ativos no filtro
-  const [onlyStage, setOnlyStage] = useState(!!stage && animalConditions.length === 0);
-  // Espaço do plano a preencher: 'dry' (seca) ou 'wet' (húmida). Define o filtro inicial.
+
+  // Espaço do plano a preencher: 'dry' (seca) ou 'wet' (húmida).
   const slot = params.slot === 'wet' || params.slot === 'dry' ? params.slot : null;
-  const [type, setType] = useState(slot); // null | 'dry' | 'wet'
-  const [sort, setSort] = useState('popular'); // 'popular' | 'cheapest'
+  const [type, setType] = useState(slot || 'dry');
+  const [onlyStage, setOnlyStage] = useState(!!stage && animalConditions.length === 0);
+  const [query, setQuery] = useState('');
+  const [submitted, setSubmitted] = useState(''); // pesquisa feita (Enter / lupa)
+  const [results, setResults] = useState({ key: '', groups: [], error: false });
+  const [showHistory, setShowHistory] = useState(false);
+  const [sizeSel, setSizeSel] = useState(null); // null = todos; número = kg; 'var' = vários tamanhos / sem peso
   const [scanning, setScanning] = useState(false);
   const [looking, setLooking] = useState(false);
   const [draft, setDraft] = useState(null); // ração a adicionar à mão (último recurso)
-  const [online, setOnline] = useState({ q: '', items: [] });
-  const trimmed = query.trim();
 
-  // Pesquisa na base aberta de rações enquanto se escreve (com pequena pausa).
+  // Opções com preço em todas as lojas: pesquisa livre (todas as lojas da web) ou sugestões para este animal.
+  const key = `${submitted}|${species}|${type}|${onlyStage ? stage || '' : ''}|${animalConditions.join(',')}`;
   useEffect(() => {
-    if (trimmed.length < 3) return undefined;
     let alive = true;
-    const t = setTimeout(async () => {
-      const items = await searchProducts(trimmed);
-      if (alive) setOnline({ q: trimmed, items });
-    }, 500);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-  }, [trimmed]);
-  // Filtros de fase (Júnior, Sénior…) e tipo (Seca = grãos, Húmida) aplicam-se a tudo:
-  // rações da app e resultados da pesquisa.
-  const productConditions = (p) => (p.conditions?.length ? p.conditions : inferConditions(`${p.name} ${(p.tags || []).join(' ')}`));
-  const matchesFilters = (p) => {
-    // Animal sem problemas de saúde: dietas veterinárias (renal, urinário, …) não aparecem, a não ser que se procure pelo nome.
-    if (!animalConditions.length && !conds.length && !trimmed && productConditions(p).length) return false;
-    if (conds.length) {
-      // Dietas para problemas de saúde: a idade não conta.
-      const pc = productConditions(p);
-      if (!conds.every((c) => pc.includes(c))) return false;
-    } else if (onlyStage && stage) {
-      const st = p.stages?.length ? p.stages : inferStages(p.name);
-      if (!st.includes(stage)) return false;
-    }
-    if (type && p.type !== type) return false;
-    return true;
-  };
-
-  const onlineLoading = trimmed.length >= 3 && online.q !== trimmed;
-  // Rações dos supermercados para este animal (fase, problema de saúde, seca/húmida).
-  const [market, setMarket] = useState({ key: '', items: [] });
-  const marketKey = `${species}|${type || 'dry'}|${conds.length ? '' : onlyStage ? stage || '' : ''}|${conds.join(',')}`;
-  useEffect(() => {
-    if (!livePricesEnabled) return undefined;
-    let alive = true;
-    const [sp, tp, st, cd] = marketKey.split('|');
-    fetchSuggestions({ species: sp, type: tp, stage: st, conditions: cd ? cd.split(',') : [] })
-      .then((items) => alive && setMarket({ key: marketKey, items }))
-      .catch(() => alive && setMarket({ key: marketKey, items: [] }));
+    const load = submitted
+      ? searchStores(submitted, { species, type })
+      : fetchSuggestions({ species, type, stage: onlyStage ? stage : '', conditions: animalConditions }).then(groupResults);
+    load
+      .then((groups) => alive && setResults({ key, groups, error: false }))
+      .catch(() => alive && setResults({ key, groups: [], error: true }));
     return () => {
       alive = false;
     };
-  }, [marketKey]);
-  const marketLoading = livePricesEnabled && market.key !== marketKey;
-  const marketItems = (market.key === marketKey ? market.items : [])
-    .filter((m) => !trimmed || `${m.brand} ${m.name}`.toLowerCase().includes(trimmed.toLowerCase()))
-    // Sem problemas de saúde na ficha: nada de dietas veterinárias.
-    .filter((m) => animalConditions.length || conds.length || !inferConditions(`${m.brand || ''} ${m.name}`).length)
-    .map((m) => {
-      const kcalKg = typicalKcalPerKg({ type: m.type || type || 'dry', name: m.name, stage });
-      const g = kcal ? kcal / (kcalKg / 1000) : null;
-      return { ...m, kcalPerKg: kcalKg, perDay: g ? (g / 1000) * m.perKg : null };
-    });
-  // "Todas": como os supermercados as mostram, alternando lojas. "Mais barata por dia": ordenadas pelo custo.
-  if (sort === 'cheapest') marketItems.sort((a, b) => (a.perDay ?? a.perKg) - (b.perDay ?? b.perKg));
-  else {
-    const byStore = {};
-    for (const m of marketItems) (byStore[m.store] ||= []).push(m);
-    const queues = Object.values(byStore);
-    marketItems.length = 0;
-    while (queues.some((q) => q.length)) for (const q of queues) if (q.length) marketItems.push(q.shift());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const loading = results.key !== key;
+  const [sizeFor, setSizeFor] = useState(key);
+  if (sizeFor !== key) {
+    setSizeFor(key);
+    setSizeSel(null);
   }
 
-  // Verifica se a ração serve para este animal (fase de vida e problemas de saúde).
-  // Se não servir, pergunta antes de continuar.
+  // Histórico deste animal (as mais recentes primeiro), com a nota 👍/👎.
+  const ids = animal ? planIds(animal, customProducts) : {};
+  const seen = animal?.foodHistory || [];
+  const current = [ids.dryId, ids.wetId].filter((id) => id && !seen.some((h) => h.productId === id)).map((id) => ({ productId: id, at: animal.updatedAt, rating: null, note: '' }));
+  const history = [...seen, ...current]
+    .map((h) => ({ ...h, product: findProduct(h.productId, customProducts) }))
+    .filter((h) => h.product)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const disliked = new Set(history.filter((h) => h.rating === 'down').map((h) => h.product.name.toLowerCase()));
+
+  // Custo por dia para este animal: energia típica da ração → gramas por dia → €/kg.
+  const options = (results.key === key ? results.groups : [])
+    .filter((g) => !type || g.type === type)
+    // Sem problemas de saúde na ficha: nada de dietas veterinárias (a não ser que se procure pelo nome).
+    .filter((g) => animalConditions.length || submitted || !inferConditions(g.name).length)
+    // Um cartão por loja: a mesma ração em duas lojas são dois cartões.
+    .flatMap((g) => {
+      const kcalKg = typicalKcalPerKg({ type: g.type, name: g.name, stage });
+      const grams = kcal ? kcal / (kcalKg / 1000) : null;
+      return g.offers.map((o) => {
+        const perKg = o.perKg || (o.kg ? o.price / o.kg : null);
+        return { ...g, offer: o, cardKey: `${g.key}|${o.store}`, perKg, kcalKg, perDay: grams && perKg ? (grams / 1000) * perKg : null };
+      });
+    })
+    .sort((a, b) => (a.perDay ?? (a.perKg ? a.perKg / 30 : 1e9)) - (b.perDay ?? (b.perKg ? b.perKg / 30 : 1e9)));
+
+  // Tamanhos dos sacos que existem nas opções (juntando os quase iguais, ±4%).
+  const kgOf = (x) => (x.offer.kg > 0 && !x.offer.desde ? x.offer.kg : null);
+  const near = (a, b) => Math.abs(a - b) / Math.max(a, b) <= 0.04;
+  const sizes = [];
+  let variousCount = 0;
+  for (const x of options) {
+    const k = kgOf(x);
+    if (!k) {
+      variousCount += 1;
+      continue;
+    }
+    const found = sizes.find((sz) => near(sz.kg, k));
+    if (found) found.count += 1;
+    else sizes.push({ kg: k, count: 1 });
+  }
+  sizes.sort((a, b) => a.kg - b.kg);
+  const shown = options.filter((x) => {
+    if (sizeSel === null) return true;
+    if (sizeSel === 'var') return !kgOf(x);
+    const k = kgOf(x);
+    return k && near(k, sizeSel);
+  });
+  const sizeText = (kg) => (kg >= 1 ? `${formatNumber(kg, kg % 1 ? 1 : 0)} kg` : `${formatNumber(kg * 1000)} g`);
+
+  // Verifica se a ração serve para este animal (fase de vida e problemas de saúde). Se não, pergunta.
   const confirmFit = (p, proceed) => {
     const text = `${p.brand || ''} ${p.name} ${(p.tags || []).join(' ')}`;
     const pStages = p.stages?.length ? p.stages : inferStagesFor(text);
     const pConds = p.conditions?.length ? p.conditions : inferConditions(text);
-    const who = params.name || (species === 'dog' ? 'o teu cão' : 'o teu gato');
     const labels = stagesFor(species, null);
     const lab = (id) => (labels.find((x) => x.id === id)?.label || id).toLowerCase();
     const issues = [];
@@ -122,6 +128,7 @@ export default function RacaoPicker() {
       const names = missing.map((c) => HEALTH_CONDITIONS.find((h) => h.id === c)?.label.toLowerCase() || c).join(' e ');
       issues.push(`Não é própria para problema ${names}, que ${who} tem.`);
     }
+    if (disliked.has(String(p.name).toLowerCase())) issues.push(`Marcaste que ${who} não gostou desta.`);
     if (!issues.length) return proceed();
     Alert.alert('Esta ração pode não ser a indicada', `${p.name}\n\n• ${issues.join('\n• ')}\n\nQueres continuar na mesma?`, [
       { text: 'Escolher outra', style: 'cancel' },
@@ -129,120 +136,68 @@ export default function RacaoPicker() {
     ]);
   };
 
-  // Escolher uma ração vista num supermercado: guarda-a com esse preço.
-  const pickMarket = (m) => {
-    const name = m.brand && !m.name.toLowerCase().includes(m.brand.toLowerCase()) ? `${m.brand} ${m.name}` : m.name;
-    const text = `${m.brand} ${m.name}`;
-    confirmFit({ name, brand: m.brand, stages: inferStagesFor(text), conditions: inferConditions(text) }, () => addMarket(m, name, text));
-  };
-  const addMarket = (m, name, text) => {
-    const id = addCustomProduct({
-      name,
-      brand: m.brand || '',
-      species,
-      stages: inferStagesFor(text),
-      conditions: inferConditions(text),
-      type: m.type || type || 'dry',
-      kcalPerKg: m.kcalPerKg,
-      kcalEstimated: true,
-      quantity: `${m.kg} kg`,
-      imageUrl: m.image || null,
-      tags: ['Energia estimada'],
-      offers: [{ store: m.store, kg: m.kg, price: m.price, link: m.link, origin: 'site' }],
-      pricesUpdatedAt: null,
-    });
-    choose(id);
-  };
-
-  const onlineItems =
-    online.q === trimmed
-      ? online.items.filter((p) => !findByEan(p.ean, customProducts) && (!p.species || p.species === species) && matchesFilters(p)).slice(0, 12)
-      : [];
-
-  // Guarda um produto da base aberta como ração da app e escolhe-o.
-  const pickOnline = (p) => {
-    const existing = p.ean ? findByEan(p.ean, customProducts) : null;
-    if (existing) return confirmFit(existing, () => choose(existing.id));
-    confirmFit(p, () => addOnline(p));
-  };
-  const addOnline = (p) => {
-    const id = addCustomProduct({
-        name: p.name,
-        brand: p.brand,
-        species,
-        stages: p.stages?.length ? p.stages : inferStagesFor(`${p.brand || ''} ${p.name}`),
-        conditions: p.conditions?.length ? p.conditions : inferConditions(`${p.brand || ''} ${p.name}`),
-        type: p.type,
-        kcalPerKg: p.kcalPerKg,
-        kcalEstimated: p.kcalEstimated,
-        ean: p.ean,
-        imageUrl: p.imageUrl,
-        quantity: p.quantity,
-        tags: p.kcalEstimated ? ['Energia estimada'] : [],
-        offers: [],
-    });
-    // Vai buscar os preços das lojas em segundo plano (o custo aparece logo que chegarem).
-    if (livePricesEnabled) {
-      fetchLivePrices(p)
-        .then((r) => updateProductOffers(id, r.offers, r.updatedAt))
-        .catch((e) => console.warn('Preços indisponíveis', e?.message));
-    }
-    choose(id);
-  };
-
-  const stageLabel = stage ? stagesFor(species, null).find((s) => s.id === stage)?.label : null;
-
-  const list = (() => {
-    const q = query.trim().toLowerCase();
-    let items = productsFor(species, customProducts).filter((p) => {
-      if (q && !`${p.name} ${p.brand || ''}`.toLowerCase().includes(q)) return false;
-      if (!matchesFilters(p)) return false;
-      return true;
-    });
-    items = items.map((p) => {
-      const offer = cheapestOffer(p);
-      const grams = kcal ? gramsPerDay(kcal, p.kcalPerKg) : null;
-      return { ...p, offer, perKg: pricePerKg(offer), perDay: costPerDay(grams, offer) };
-    });
-    if (sort === 'cheapest') {
-      items.sort((a, b) => (a.perDay ?? a.perKg ?? Infinity) - (b.perDay ?? b.perKg ?? Infinity));
-    }
-    return items;
-  })();
-
-  const choose = (id) => {
+  const finish = (id) => {
+    if (animalId) recordFood(animalId, id);
     setPickedProductId(slot ? { id, slot } : id);
     router.back();
   };
 
-  // Código lido (ou escrito): 1) catálogo da app, 2) bases abertas, 3) à mão.
+  // Escolher uma opção: guarda a ração com os preços de todas as lojas onde a vimos.
+  const pickGroup = (g) => {
+    const existing = customProducts.find((p) => p.name.toLowerCase() === g.name.toLowerCase());
+    if (existing) return confirmFit(existing, () => finish(existing.id));
+    const text = `${g.brand || ''} ${g.name}`;
+    confirmFit({ name: g.name, brand: g.brand, stages: inferStagesFor(text), conditions: inferConditions(text) }, () => {
+      const id = addCustomProduct({
+        name: g.name,
+        brand: g.brand || '',
+        species,
+        stages: inferStagesFor(text),
+        conditions: inferConditions(text),
+        type: g.type || type,
+        kcalPerKg: g.kcalKg,
+        kcalEstimated: true,
+        quantity: g.kg ? `${g.kg} kg` : '',
+        imageUrl: g.image || null,
+        tags: ['Energia estimada'],
+        offers: [g.offer, ...g.offers.filter((o) => o !== g.offer)]
+          .filter((o) => o && (o.kg || o.perKg))
+          .map((o) => ({ store: o.store, kg: o.kg || (o.perKg ? o.price / o.perKg : null), price: o.price, link: o.link, origin: 'site' })),
+        pricesUpdatedAt: new Date().toISOString(),
+      });
+      finish(id);
+    });
+  };
+
+  const search = (text = query) => {
+    const q = text.trim();
+    setSubmitted(q.length >= 2 ? q : '');
+  };
+
+  // Código lido (ou escrito): procura o nome e mostra os preços dessa ração em todas as lojas.
   const onCode = async (code) => {
     setScanning(false);
     const known = findByEan(code, customProducts);
-    if (known) return confirmFit(known, () => choose(known.id));
+    if (known) return confirmFit(known, () => finish(known.id));
     setLooking(true);
-    const found = await lookupBarcode(code);
+    const found = await lookupBarcode(code).catch(() => null);
+    setLooking(false);
     if (found) {
-      // Tudo automático: nome, foto e energia (da base, de um produto semelhante ou típica).
-      const complete = await ensureEnergy(found, stage);
-      setLooking(false);
-      pickOnline(complete);
+      const text = [found.brand, found.name].filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 70);
+      setQuery(text);
+      search(text);
     } else {
-      setLooking(false);
-      Alert.alert(
-        'Não encontrámos esta ração',
-        `O código ${code} ainda não está na base de dados. Escreve o nome da ração na pesquisa e escolhe-a da lista.`,
-        [
-          { text: 'Adicionar à mão', onPress: () => setDraft({ ean: code, name: '', kcal: '' }) },
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
+      Alert.alert('Não encontrámos esta ração', `O código ${code} não está na base de dados. Escreve o nome da ração na pesquisa.`, [
+        { text: 'Adicionar à mão', onPress: () => setDraft({ ean: code, name: '', kcal: '' }) },
+        { text: 'OK', style: 'cancel' },
+      ]);
     }
   };
 
-  if (scanning) {
-    return <Scanner onClose={() => setScanning(false)} onCode={onCode} />;
-  }
+  if (scanning) return <Scanner onClose={() => setScanning(false)} onCode={onCode} />;
+
+  const stageLabel = stage ? stagesFor(species, null).find((s) => s.id === stage)?.label : null;
+  const condLabel = animalConditions.map((c) => HEALTH_CONDITIONS.find((h) => h.id === c)?.label.toLowerCase() || c).join(' e ');
 
   return (
     <Screen>
@@ -264,21 +219,38 @@ export default function RacaoPicker() {
           species={species}
           stage={stage}
           onCancel={() => setDraft(null)}
-          onSave={(p) => choose(addCustomProduct({ ...p, conditions: inferConditions(p.name).length ? inferConditions(p.name) : conds }))}
+          onSave={(p) => finish(addCustomProduct({ ...p, conditions: inferConditions(p.name).length ? inferConditions(p.name) : animalConditions }))}
         />
       ) : null}
 
+      {/* Pesquisa */}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Ionicons name="search" size={18} color={colors.textMuted} style={{ position: 'absolute', left: 14, zIndex: 1 }} />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Marca ou nome"
+            onSubmitEditing={() => search()}
+            returnKeyType="search"
+            placeholder="Procurar marca ou nome"
             placeholderTextColor={colors.textMuted}
-            accessibilityLabel="Pesquisar ração"
-            style={[ui.input, { paddingLeft: 42 }]}
+            accessibilityLabel="Procurar ração"
+            style={[ui.input, { paddingLeft: 42, paddingRight: query ? 40 : 14 }]}
           />
+          {query ? (
+            <Pressable
+              onPress={() => {
+                setQuery('');
+                setSubmitted('');
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Limpar pesquisa"
+              style={{ position: 'absolute', right: 12 }}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
         <Pressable
           onPress={() => setScanning(true)}
@@ -292,144 +264,199 @@ export default function RacaoPicker() {
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {stageLabel ? <Chip label={stageLabel} active={onlyStage} onPress={() => setOnlyStage((v) => !v)} /> : null}
-        <Chip label="Seca (grãos)" active={type === 'dry'} onPress={() => setType((t) => (t === 'dry' ? null : 'dry'))} />
-        <Chip label="Húmida" active={type === 'wet'} onPress={() => setType((t) => (t === 'wet' ? null : 'wet'))} />
+        <Chip label="Seca" active={type === 'dry'} onPress={() => setType('dry')} />
+        <Chip label="Húmida" active={type === 'wet'} onPress={() => setType('wet')} />
       </View>
+      {condLabel ? <Body muted size={12}>Só rações para problema {condLabel}, como está na ficha de {who}.</Body> : null}
 
-      {/* Só aparece se o animal tiver problemas de saúde na ficha (e só esses). */}
-      {animalConditions.length ? (
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted }}>Problema de saúde de {name}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
-          {HEALTH_CONDITIONS.filter((c) => animalConditions.includes(c.id)).map((c) => {
-            const on = conds.includes(c.id);
-            return <Chip key={c.id} label={c.label} active={on} onPress={() => setConds((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))} />;
-          })}
-        </ScrollView>
-        {conds.length ? <Body muted size={12}>Rações para {conds.map((c) => HEALTH_CONDITIONS.find((h) => h.id === c)?.label.toLowerCase()).join(' e ')}, para qualquer idade. Segue a indicação do veterinário.</Body> : null}
-      </View>
-      ) : null}
-
-      <Segmented
-        value={sort}
-        onChange={setSort}
-        options={[
-          { value: 'popular', label: 'Todas' },
-          { value: 'cheapest', label: kcal ? 'Mais barata por dia' : 'Mais barata/kg' },
-        ]}
-      />
-      {sort === 'cheapest' && kcal ? <Body muted size={13}>Custo diário para {name}, com a dose certa de cada ração.</Body> : null}
-
-      <View style={{ gap: 10 }}>
-        {list.map((p) => (
+      {/* Já experimentou (fechado; abre-se para ver) */}
+      {history.length ? (
+        <View style={[ui.card, { padding: 0, overflow: 'hidden' }]}>
           <Pressable
-            key={p.id}
-            onPress={() => confirmFit(p, () => choose(p.id))}
+            onPress={() => setShowHistory((v) => !v)}
             accessibilityRole="button"
-            accessibilityLabel={`Escolher ${p.name}`}
-            style={({ pressed }) => [ui.card, { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10 }, pressed && { backgroundColor: colors.bg }]}
+            accessibilityState={{ expanded: showHistory }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, minHeight: 52 }}
           >
-            <ProductThumb product={p} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>{p.name}</Text>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                {formatNumber(p.kcalPerKg)} kcal/kg{p.tags?.length ? ` · ${p.tags.join(', ')}` : ''}{p.custom ? ' · adicionada por ti' : ''}
-              </Text>
-              {p.offer ? (
-                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 6 }}>
-                  {sort === 'cheapest' && p.perDay != null ? (
-                    <Text style={{ fontFamily: fonts.semibold, color: colors.coralDark }}>{formatEuro(p.perDay)}/dia</Text>
-                  ) : (
-                    <>desde <Text style={{ fontFamily: fonts.semibold, color: colors.text }}>{formatEuro(p.perKg)}/kg</Text>{p.offer.store ? ` em ${p.offer.store}` : ''}</>
-                  )}
-                </Text>
-              ) : null}
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            <Ionicons name="time-outline" size={20} color={colors.navy} />
+            <Text style={{ flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>
+              Já experimentou ({history.length})
+            </Text>
+            <Ionicons name={showHistory ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
           </Pressable>
-        ))}
-        {list.length === 0 && !onlineLoading && onlineItems.length === 0 ? (
-          <Body muted style={{ textAlign: 'center', paddingVertical: 20 }}>Nenhuma ração encontrada.</Body>
-        ) : null}
+          {showHistory
+            ? history.map((h) => (
+                <HistoryRow
+                  key={h.productId}
+                  item={h}
+                  onChoose={() => confirmFit(h.product, () => finish(h.product.id))}
+                  onRate={(rating) => rateFood(animalId, h.productId, { rating: h.rating === rating ? null : rating })}
+                  onNote={(note) => rateFood(animalId, h.productId, { note })}
+                />
+              ))
+            : null}
+        </View>
+      ) : null}
+
+      {/* Opções com preço, de todas as lojas */}
+      <View style={{ gap: 2 }}>
+        <Text style={{ fontFamily: fonts.displaySemi, fontSize: 19, color: colors.text }}>
+          {submitted ? `Resultados para “${submitted}”` : `Opções para ${who}`}
+        </Text>
+        <Body muted size={13}>Da mais barata por dia para {who}, em todas as lojas. Toca para escolher; o ícone abre a loja.</Body>
       </View>
 
-      {livePricesEnabled ? (
-        <View style={{ gap: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>Nos supermercados</Text>
-            {marketLoading ? <ActivityIndicator size="small" color={colors.navy} /> : null}
-          </View>
-          <Body muted size={12}>
-            {conds.length ? 'Rações para este problema de saúde' : onlyStage && stageLabel ? `Rações ${stageLabel.toLowerCase()}` : 'Rações'} {type === 'wet' ? 'húmidas' : 'secas'}{sort === 'cheapest' ? `, da mais barata por dia${kcal ? ` para ${name}` : ''}` : ' do Continente, Auchan e Pingo Doce'}. Toca para ver no site.
-          </Body>
-          {marketItems.slice(0, 15).map((m) => (
-            <View key={`${m.store}-${m.name}-${m.kg}`} style={[ui.card, { padding: 10, gap: 10 }]}>
-              {/* Tocar no produto abre a página do supermercado */}
-              <Pressable
-                onPress={() => m.link && Linking.openURL(m.link).catch(() => {})}
-                disabled={!m.link}
-                accessibilityRole="link"
-                accessibilityLabel={`Ver ${m.name} no site do ${m.store}`}
-                style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}
-              >
-                <ProductThumb product={{ name: m.name, imageUrl: m.image, type: m.type }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>{m.name}</Text>
-                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                    {m.store} · {m.kg && !m.desde ? `${formatNumber(m.kg, m.kg % 1 ? 1 : 0)} kg` : 'vários tamanhos'} · {m.desde ? 'desde ' : ''}{formatEuro(m.price)} · {formatEuro(m.perKg)}/kg
-                  </Text>
-                  {m.perDay != null ? <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.coralDark, marginTop: 4 }}>{formatEuro(m.perDay)}/dia</Text> : null}
-                </View>
-                {m.link ? <Ionicons name="open-outline" size={18} color={colors.textMuted} /> : null}
-              </Pressable>
-              <Button variant="secondary" title="Escolher esta ração" onPress={() => pickMarket(m)} style={{ minHeight: 44 }} />
-            </View>
-          ))}
-          {!marketLoading && marketItems.length === 0 ? (
-            <Body muted size={13}>Não encontrámos rações destas nos supermercados online. Experimenta pesquisar pelo nome ou tirar um filtro.</Body>
-          ) : null}
+      {!loading && sizes.length > 1 ? (
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>Tamanho do saco</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+            <Chip label={`Todos (${options.length})`} active={sizeSel === null} onPress={() => setSizeSel(null)} />
+            {sizes.map((sz) => (
+              <Chip key={sz.kg} label={`${sizeText(sz.kg)} (${sz.count})`} active={typeof sizeSel === 'number' && near(sizeSel, sz.kg)} onPress={() => setSizeSel(sz.kg)} />
+            ))}
+            {variousCount ? <Chip label={`Vários tamanhos (${variousCount})`} active={sizeSel === 'var'} onPress={() => setSizeSel('var')} /> : null}
+          </ScrollView>
         </View>
       ) : null}
 
-      {query.trim().length >= 3 ? (
-        <View style={{ gap: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted }}>Mais rações com este nome</Text>
-            {onlineLoading ? <ActivityIndicator size="small" color={colors.navy} /> : null}
-          </View>
-          {onlineItems.map((p) => (
-            <Pressable
-              key={p.ean || p.name}
-              onPress={() => pickOnline(p)}
-              accessibilityRole="button"
-              accessibilityLabel={`Escolher ${p.name}`}
-              style={({ pressed }) => [ui.card, { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10 }, pressed && { backgroundColor: colors.bg }]}
-            >
-              <ProductThumb product={p} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>{p.name}</Text>
-                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                  {[p.brand, p.quantity].filter(Boolean).join(' · ')}
-                </Text>
-                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
-                  {formatNumber(p.kcalPerKg)} kcal/kg{p.kcalEstimated ? ' (estimada pela composição)' : ''}
-                </Text>
-              </View>
-              <Ionicons name="add-circle-outline" size={22} color={colors.navy} />
-            </Pressable>
-          ))}
-          {!onlineLoading && onlineItems.length === 0 ? (
-            <Body muted size={13}>Sem resultados na base de dados para “{query.trim()}”.</Body>
-          ) : null}
+      {loading ? (
+        <View style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
+          <ActivityIndicator color={colors.navy} />
+          <Body muted size={14}>A ver os preços nas lojas…</Body>
         </View>
-      ) : null}
+      ) : results.error ? (
+        <Body muted>Não foi possível ver os preços agora. Confirma a internet e tenta outra vez.</Body>
+      ) : shown.length === 0 ? (
+        <Body muted>Não encontrámos opções{submitted ? ' com esse nome' : ''}. Experimenta só a marca, por exemplo “Royal Canin”.</Body>
+      ) : (
+        <View style={{ gap: 10 }}>
+          {shown.slice(0, 40).map((g, i) => (
+            <OptionCard
+              key={g.cardKey}
+              group={g}
+              cheapest={i === 0 && g.perDay != null}
+              disliked={disliked.has(g.name.toLowerCase())}
+              onPress={() => pickGroup(g)}
+            />
+          ))}
+        </View>
+      )}
 
-      <Body muted size={12} style={{ textAlign: 'center' }}>Preços sem portes</Body>
-
-      {!draft ? (
-        <Button variant="ghost" icon="add-circle-outline" title="Não encontras? Adiciona à mão" onPress={() => setDraft({ name: '', kcal: '' })} />
-      ) : null}
+      <Pressable onPress={() => setDraft({ ean: '', name: query.trim(), kcal: '' })} accessibilityRole="button" style={{ alignSelf: 'center', padding: 10, minHeight: 44, justifyContent: 'center' }}>
+        <Text style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted }}>
+          Não encontras? <Text style={{ fontFamily: fonts.semibold, color: colors.navy }}>Adicionar à mão</Text>
+        </Text>
+      </Pressable>
     </Screen>
+  );
+}
+
+// Uma opção (uma loja): foto, nome, loja, tamanho e preço do saco; à direita o custo por dia.
+// Tocar no cartão escolhe a ração; o ícone abre a página da loja.
+function OptionCard({ group, cheapest, disliked, onPress }) {
+  const o = group.offer;
+  const size = o.kg && !o.desde ? `${formatNumber(o.kg, o.kg % 1 ? 1 : 0)} kg` : 'vários tamanhos';
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Escolher ${group.name} da ${o.store}`}
+      style={({ pressed }) => [ui.card, { padding: 12, opacity: disliked ? 0.6 : 1 }, pressed && { backgroundColor: colors.bg }, cheapest && { borderColor: colors.coral }]}
+    >
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+        <View style={{ width: 60, height: 60, borderRadius: 10, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {group.image ? <Image source={{ uri: group.image }} style={{ width: 56, height: 56 }} resizeMode="contain" /> : <Ionicons name="image-outline" size={22} color={colors.textMuted} />}
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          {cheapest || disliked ? (
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {cheapest ? <Tag text="Mais barata" /> : null}
+              {disliked ? <Tag text="Não gostou" muted /> : null}
+            </View>
+          ) : null}
+          <Text numberOfLines={2} style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>{group.name}</Text>
+          <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted }}>
+            <Text style={{ fontFamily: fonts.semibold, color: colors.text }}>{o.store}</Text> · {size} · {o.desde ? 'desde ' : ''}
+            <Text style={{ fontFamily: fonts.semibold, color: colors.text }}>{formatEuro(o.price)}</Text>
+            {o.portes ? ` · ${o.portes}` : ''}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.coralDark }}>
+              {group.perDay != null ? formatEuro(group.perDay) : group.perKg ? formatEuro(group.perKg) : '—'}
+            </Text>
+            <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted }}>{group.perDay != null ? 'por dia' : 'por kg'}</Text>
+          </View>
+          {o.link ? (
+            <Pressable onPress={() => Linking.openURL(o.link).catch(() => {})} hitSlop={10} accessibilityRole="link" accessibilityLabel={`Abrir na ${o.store}`}>
+              <Ionicons name="open-outline" size={18} color={colors.navy} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function Tag({ text, muted }) {
+  return (
+    <Text style={{ fontFamily: fonts.semibold, fontSize: 11, color: muted ? colors.textMuted : colors.coralTintText, backgroundColor: muted ? colors.segmentBg : colors.coralTint, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' }}>
+      {text}
+    </Text>
+  );
+}
+
+// Uma ração que o animal já comeu: escolher outra vez, 👍/👎 e uma nota.
+function HistoryRow({ item, onChoose, onRate, onNote }) {
+  const [note, setNote] = useState(item.note || '');
+  const p = item.product;
+  const offer = cheapestOffer(p);
+  return (
+    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, padding: 12, gap: 8, opacity: item.rating === 'down' ? 0.7 : 1 }}>
+      <Pressable onPress={onChoose} accessibilityRole="button" accessibilityLabel={`Escolher outra vez ${p.name}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <ProductThumb product={p} size={44} />
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={2} style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>{p.name}</Text>
+          <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted }}>
+            {offer ? `${offer.store} · ${formatEuro(offer.price)}` : 'sem preço'}
+            {item.at ? ` · ${new Date(item.at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}` : ''}
+          </Text>
+        </View>
+        <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.navy }}>Escolher</Text>
+      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {[
+          { id: 'up', icon: 'thumbs-up', label: 'Gostou' },
+          { id: 'down', icon: 'thumbs-down', label: 'Não gostou' },
+        ].map((r) => {
+          const on = item.rating === r.id;
+          return (
+            <Pressable
+              key={r.id}
+              onPress={() => onRate(r.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, minHeight: 36, borderRadius: 18, borderWidth: 1, borderColor: on ? colors.navy : colors.borderStrong, backgroundColor: on ? colors.coralTint : colors.card }}
+            >
+              <Ionicons name={on ? r.icon : `${r.icon}-outline`} size={14} color={colors.navy} />
+              <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: colors.navy }}>{r.label}</Text>
+            </Pressable>
+          );
+        })}
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          onEndEditing={() => note !== (item.note || '') && onNote(note.trim())}
+          placeholder="Nota (ex.: vomitou)"
+          placeholderTextColor={colors.textMuted}
+          maxLength={80}
+          returnKeyType="done"
+          accessibilityLabel="Nota sobre esta ração"
+          style={{ flex: 1, minHeight: 36, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, fontFamily: fonts.regular, fontSize: 13, color: colors.text, backgroundColor: colors.card }}
+        />
+      </View>
+    </View>
   );
 }
 

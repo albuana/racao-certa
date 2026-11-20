@@ -196,6 +196,35 @@ export function StoreProvider({ children }) {
     }));
   }, []);
 
+  // Histórico de rações de cada animal: { productId, at, rating: 'up' | 'down' | null, note }
+  const recordFood = useCallback((animalId, productId) => {
+    setState((s) => ({
+      ...s,
+      animals: s.animals.map((a) => {
+        if (a.id !== animalId) return a;
+        const list = a.foodHistory || [];
+        const prev = list.find((h) => h.productId === productId);
+        const entry = { ...(prev || { rating: null, note: '' }), productId, at: now() };
+        return { ...a, foodHistory: [entry, ...list.filter((h) => h.productId !== productId)].slice(0, 30), updatedAt: now() };
+      }),
+    }));
+  }, []);
+
+  const rateFood = useCallback((animalId, productId, patch) => {
+    setState((s) => ({
+      ...s,
+      animals: s.animals.map((a) => {
+        if (a.id !== animalId) return a;
+        const list = a.foodHistory || [];
+        const exists = list.some((h) => h.productId === productId);
+        const next = exists
+          ? list.map((h) => (h.productId === productId ? { ...h, ...patch } : h))
+          : [{ productId, at: now(), rating: null, note: '', ...patch }, ...list];
+        return { ...a, foodHistory: next, updatedAt: now() };
+      }),
+    }));
+  }, []);
+
   // ⭐ Favoritas
   const toggleFavorite = useCallback((group) => {
     setState((s) => {
@@ -258,6 +287,8 @@ export function StoreProvider({ children }) {
       updateProductOffers,
       toggleFavorite,
       updateFavorite,
+      recordFood,
+      rateFood,
       resetAll,
     }),
     [
@@ -277,6 +308,8 @@ export function StoreProvider({ children }) {
       updateProductOffers,
       toggleFavorite,
       updateFavorite,
+      recordFood,
+      rateFood,
       resetAll,
     ]
   );
