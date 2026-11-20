@@ -97,12 +97,26 @@ eas submit --platform ios
 ```
 O ficheiro `eas.json` já tem os perfis `development`, `preview` (APK para testar) e `production`.
 
-## Ligar contas (próximo passo)
+## Contas (Supabase)
 
-O estado da app está todo em `src/store/AppStore.js`. Para sincronizar entre telemóveis e famílias:
-1. Cria um projeto **Supabase** ou **Firebase**.
-2. Junta “Entrar com a Apple” (`expo-apple-authentication`) e “Entrar com o Google”.
-3. Em `continueAsGuest`/`saveAnimal`/…, grava também no servidor. Os dados do modo sem registo podem ser enviados para a conta nova no primeiro login.
+O login (Apple, Google, email) e a sincronização da casa usam o **Supabase**. Sem as chaves no `.env.local`, os botões dizem "em breve" e a app funciona só sem registo.
+
+1. **Projeto**: em [supabase.com](https://supabase.com) cria um projeto (região *West EU*).
+2. **Base de dados**: *SQL Editor* → cola `server/supabase/schema.sql` → *Run*.
+3. **Chaves**: *Project Settings › API Keys* → copia o *Project URL* e a *Publishable key* para o `.env.local`:
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+   EXPO_PUBLIC_SUPABASE_KEY=sb_publishable_...
+   ```
+   Reinicia o `npx expo start`.
+4. **Ligações de volta**: *Authentication › URL Configuration › Redirect URLs* → junta `racaocerta://**` e `exp://**` (este último só para testar no Expo Go).
+5. **Email**: já vem ligado. Em *Authentication › Emails* podes pôr os textos em português.
+6. **Google**: na [Google Cloud Console](https://console.cloud.google.com) cria um *OAuth client ID* do tipo *Web application* com o *Authorized redirect URI* `https://xxxx.supabase.co/auth/v1/callback`. Cola o *Client ID* e o *Client secret* em *Authentication › Sign In / Providers › Google*.
+7. **Apple** (precisa da conta Apple Developer): em *Providers › Apple*, liga-o e em *Client IDs* põe `pt.racaocerta.app,host.exp.Exponent` (o segundo é o Expo Go). Para entrar com a Apple na app nativa não é preciso o *secret*.
+
+Emails: a confirmação de conta e a recuperação da palavra-passe usam um código de 6 dígitos (sem links). Copia os modelos de `server/supabase/emails.md` para *Authentication › Emails › Templates*.
+
+Como funciona: a casa (nome, animais, rações) fica numa linha da tabela `casas` por conta. Ao entrar, junta o que está no telemóvel com o que está na conta; depois cada alteração é enviada 1,5 s depois. "Terminar sessão" limpa o telemóvel; "Apagar conta" apaga tudo (obrigatório na App Store). As fotos dos animais ainda ficam só no telemóvel onde foram tiradas.
 
 ## Próximas ideias
 

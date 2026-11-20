@@ -21,7 +21,8 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="inicio" options={{ title: 'Início', tabBarIcon: icon('home') }} />
-      <Tabs.Screen name="animais" options={{ title: 'Animais', tabBarIcon: icon('paw') }} />
+      {/* Os animais estão no Início; este ecrã fica escondido do rodapé. */}
+      <Tabs.Screen name="animais" options={{ href: null }} />
       <Tabs.Screen name="precos" options={{ title: 'Preços', tabBarIcon: icon('pricetag') }} />
       <Tabs.Screen name="perfil" options={{ title: 'Perfil', tabBarIcon: icon('person') }} />
     </Tabs>

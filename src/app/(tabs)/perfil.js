@@ -1,13 +1,40 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
-import { Body, Button, Card, Field, Screen, Title } from '../../components/ui';
+import { Alert, Pressable, Text, View } from 'react-native';
+import { LogoIcon } from '../../components/Logo';
+import { Body, Button, Card, Field, Label, Screen, Title } from '../../components/ui';
+import { authMessage } from '../../lib/auth';
+import { authEnabled } from '../../lib/supabase';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
 
+const PROVIDER = { apple: 'Conta Apple', google: 'Conta Google', email: 'Conta com email' };
+
+function syncText(sync) {
+  if (sync.status === 'syncing') return 'A sincronizar…';
+  if (sync.status === 'error') return 'Sem ligação à conta. Tentamos outra vez quando mudares alguma coisa.';
+  if (sync.status === 'ok' && sync.at) {
+    const t = new Date(sync.at);
+    return `Guardado na conta às ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  }
+  return 'Guardado na conta';
+}
+
 export default function Perfil() {
-  const { account, house, setHouseName, animals, resetAll } = useStore();
-  const [name, setName] = useState(house?.name || '');
+  const { account, house, setHouseName, animals, resetAll, signOut, deleteAccount, sync } = useStore();
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const signedIn = Boolean(account?.userId);
+
+  const startEdit = () => {
+    setName(house?.name || '');
+    setEditing(true);
+  };
+  const saveName = () => {
+    setHouseName(name.trim());
+    setEditing(false);
+  };
 
   const confirmReset = () =>
     Alert.alert('Apagar todos os dados?', 'Os animais e a casa deste telemóvel são apagados. Não dá para desfazer.', [
@@ -22,37 +49,118 @@ export default function Perfil() {
       },
     ]);
 
+  const confirmSignOut = () =>
+    Alert.alert('Terminar sessão?', 'Os teus animais ficam guardados na conta. Quando voltares a entrar, aparecem outra vez.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Terminar sessão',
+        onPress: async () => {
+          await signOut();
+          router.replace('/login');
+        },
+      },
+    ]);
+
+  const confirmDeleteAccount = () =>
+    Alert.alert(
+      'Apagar a conta?',
+      'A conta, a casa e todos os animais são apagados para sempre, neste e noutros telemóveis. Não dá para desfazer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar conta',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              router.replace('/login');
+            } catch (e) {
+              Alert.alert('Não foi possível apagar a conta', authMessage(e));
+            }
+          },
+        },
+      ]
+    );
+
   return (
     <Screen>
       <Title size={30}>Perfil</Title>
 
-      <Card style={{ gap: 6 }}>
-        <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>
-          {account?.mode === 'guest' ? 'Sem registo' : 'Conta'}
-        </Text>
-        <Body muted size={14}>
-          {account?.mode === 'guest'
-            ? 'Os teus dados estão só neste telemóvel. Em breve vais poder criar conta e sincronizar com a família.'
-            : 'Sessão iniciada.'}
-        </Body>
-      </Card>
+      {signedIn ? (
+        <Card style={{ gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons
+              name={account.mode === 'apple' ? 'logo-apple' : account.mode === 'google' ? 'logo-google' : 'mail-outline'}
+              size={20}
+              color={colors.navy}
+            />
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>
+              {PROVIDER[account.mode] || 'Conta'}
+            </Text>
+          </View>
+          {account.email ? <Body size={14}>{account.email}</Body> : null}
+          <Body muted size={13}>{syncText(sync)}</Body>
+        </Card>
+      ) : (
+        <Card style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <LogoIcon size={40} />
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>Sem registo</Text>
+          </View>
+          <Body muted size={14}>
+            {authEnabled
+              ? 'Os teus dados estão só neste telemóvel. Cria conta para os guardares e veres noutro telemóvel. Não perdes nada do que já tens.'
+              : 'Os teus dados estão só neste telemóvel. Em breve vais poder criar conta e sincronizar com a família.'}
+          </Body>
+          {authEnabled ? (
+            <Button title="Criar conta ou entrar" onPress={() => router.push({ pathname: '/login', params: { from: 'perfil' } })} />
+          ) : null}
+        </Card>
+      )}
 
       <Card style={{ gap: 12 }}>
-        <Field label="Nome da casa" value={name} onChangeText={setName} maxLength={40} />
-        <Button
-          variant="secondary"
-          title="Guardar nome"
-          disabled={!name.trim() || name.trim() === house?.name}
-          onPress={() => setHouseName(name.trim())}
-        />
-        <Body muted size={13}>{animals.length} {animals.length === 1 ? 'animal' : 'animais'} nesta casa</Body>
+        {editing ? (
+          <>
+            <Field label="Nome da casa" value={name} onChangeText={setName} maxLength={40} autoFocus />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button variant="ghost" title="Cancelar" onPress={() => setEditing(false)} style={{ flex: 1 }} />
+              <Button variant="primary" title="Guardar" disabled={!name.trim()} onPress={saveName} style={{ flex: 1 }} />
+            </View>
+          </>
+        ) : (
+          <Pressable
+            onPress={startEdit}
+            accessibilityRole="button"
+            accessibilityLabel="Editar nome da casa"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+          >
+            <View style={{ flex: 1 }}>
+              <Label>Casa</Label>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 20, color: colors.text }}>{house?.name || 'Sem nome'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="pencil" size={16} color={colors.coralDark} />
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.coralDark }}>Editar</Text>
+            </View>
+          </Pressable>
+        )}
+        <Body muted size={13}>
+          {animals.length} {animals.length === 1 ? 'animal' : 'animais'} nesta casa
+        </Body>
       </Card>
 
       <View style={{ gap: 8 }}>
         <Body muted size={12}>
           As doses são estimativas de referência e não substituem o conselho do veterinário. Os preços não incluem portes.
         </Body>
-        <Button variant="ghost" title="Apagar todos os dados" onPress={confirmReset} />
+        {signedIn ? (
+          <>
+            <Button variant="secondary" title="Terminar sessão" onPress={confirmSignOut} />
+            <Button variant="ghost" title="Apagar conta" onPress={confirmDeleteAccount} />
+          </>
+        ) : (
+          <Button variant="ghost" title="Apagar todos os dados" onPress={confirmReset} />
+        )}
       </View>
     </Screen>
   );

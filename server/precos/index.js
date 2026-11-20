@@ -24,6 +24,33 @@ const CORS = {
   'access-control-allow-methods': 'GET, POST, OPTIONS',
 };
 
+
+// Página que abre depois de carregar no link do email de confirmação de conta.
+const CONFIRMADO_HTML = `<!doctype html>
+<html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conta confirmada · Ração Certa</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#FFF6F4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#2E2A2A}
+main{max-width:360px;padding:32px 24px;text-align:center}
+.icon{width:96px;height:96px;border-radius:22px;background:#FF6B5E;display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
+h1{font-size:26px;color:#14345A;margin:0 0 12px}
+p{font-size:17px;line-height:1.5;color:#6B5F5D;margin:0 0 10px}
+</style></head>
+<body><main>
+<div class="icon"><svg width="62" height="62" viewBox="0 0 120 120" aria-hidden="true">
+<path d="M12 60 H108 A48 44 0 0 1 12 60 Z" fill="#fff"/><rect x="6" y="53" width="108" height="13" rx="6.5" fill="#fff"/>
+<circle cx="42" cy="80" r="5.5" fill="#FF6B5E"/><circle cx="60" cy="88" r="5.5" fill="#FF6B5E"/><circle cx="78" cy="80" r="5.5" fill="#FF6B5E"/>
+<polyline points="34,30 54,48 94,8" fill="none" stroke="#14345A" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<h1 id="t">Conta confirmada</h1>
+<p id="m">Já podes fechar esta página. Volta à app Ração Certa e carrega em <strong>Já confirmei, entrar</strong>.</p>
+</main>
+<script>
+var q=new URLSearchParams(location.search+'&'+location.hash.slice(1));
+if(q.get('error')){document.getElementById('t').textContent='O link já não é válido';
+document.getElementById('m').textContent='Pode ter expirado ou já ter sido usado. Na app, entra com o teu email: se a conta ainda não estiver confirmada, enviamos-te outro email.';}
+</script>
+</body></html>`;
+
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -93,6 +120,22 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+    // Regresso do Google e dos links de recuperação: reencaminha para a app (exp:// no Expo Go, racaocerta:// na loja).
+    if (url.pathname === '/auth/voltar') {
+      const to = url.searchParams.get('to') || 'racaocerta://auth-callback';
+      if (!/^(exp|racaocerta):\/\//.test(to)) return json({ erro: 'Destino inválido' }, 400);
+      const params = new URLSearchParams(url.search);
+      params.delete('to');
+      const target = params.toString() ? `${to}${to.includes('?') ? '&' : '?'}${params}` : to;
+      const safe = target.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      return new Response(
+        `<!doctype html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=${safe}"><title>Ração Certa</title></head><body style="font-family:-apple-system,Helvetica,Arial,sans-serif;text-align:center;padding:48px 24px;background:#FFF6F4;color:#2E2A2A"><p>A voltar à app Ração Certa…</p><p><a href="${safe}" style="color:#14345A;font-weight:600">Abrir a app</a></p></body></html>`,
+        { status: 302, headers: { location: target, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } }
+      );
+    }
+    if (url.pathname === '/confirmado') {
+      return new Response(CONFIRMADO_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
     if (!url.pathname.startsWith('/precos')) return json({ erro: 'Não encontrado' }, 404);
     if (env.APP_TOKEN && request.headers.get('x-app-token') !== env.APP_TOKEN) {
       return json({ erro: 'Não autorizado' }, 401);

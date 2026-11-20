@@ -31,7 +31,7 @@ export default function Precos() {
       {list.length === 0 ? (
         <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
           <Body muted style={{ textAlign: 'center' }}>Escolhe a ração de um animal para comparar preços.</Body>
-          <Button variant="secondary" title="Ver animais" onPress={() => router.push('/animais')} />
+          <Button variant="secondary" title="Ver animais" onPress={() => router.push('/inicio')} />
         </Card>
       ) : (
         list.map(({ product, offer, grams, names }) => (

@@ -85,7 +85,7 @@ export function Card({ children, style, onPress, accessibilityLabel }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-export function Field({ label, value, onChangeText, placeholder, keyboardType, style, autoFocus, maxLength }) {
+export function Field({ label, value, onChangeText, placeholder, keyboardType, style, autoFocus, maxLength, ...rest }) {
   return (
     <View style={style}>
       {label ? <Label>{label}</Label> : null}
@@ -98,6 +98,7 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, s
         autoFocus={autoFocus}
         maxLength={maxLength}
         accessibilityLabel={label}
+        {...rest}
         style={styles.input}
       />
     </View>

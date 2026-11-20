@@ -12,7 +12,8 @@
       "bundleIdentifier": "pt.racaocerta.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "pt.racaocerta.app",
@@ -51,7 +52,9 @@
           "recordAudioAndroid": false
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-apple-authentication",
+      "expo-web-browser"
     ]
   }
 }

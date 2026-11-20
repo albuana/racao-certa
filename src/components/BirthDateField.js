@@ -29,8 +29,8 @@ export default function BirthDateField({ value, onChange, stageName }) {
         mode: 'date',
         maximumDate: today,
         minimumDate: minDate,
-        onChange: (event, date) => {
-          if (event.type === 'set' && date) onChange(toISODate(date));
+        onValueChange: (_, date) => {
+          if (date) onChange(toISODate(date));
         },
       });
     } else {
@@ -87,7 +87,7 @@ export default function BirthDateField({ value, onChange, stageName }) {
                 minimumDate={minDate}
                 themeVariant="light"
                 textColor={colors.text}
-                onChange={(_, d) => d && setDraft(d)}
+                onValueChange={(_, d) => d && setDraft(d)}
               />
             ) : null}
             <Button
