@@ -15,7 +15,7 @@ grant select, insert, update, delete on public.casas to authenticated;
 revoke all on public.casas from anon;
 
 -- Cada pessoa só vê e altera a sua casa.
-drop policy if exists "ler a minha casa" on public.casas;
+drop policy if exists "ler a minha casa" on public.casas; 
 create policy "ler a minha casa" on public.casas
   for select to authenticated using ((select auth.uid()) = user_id);
 
