@@ -29,9 +29,6 @@ import {
   bodyCondition,
   HEALTH_CONDITIONS,
   SPECIES,
-  dailyKcal,
-  describeAnimal,
-  formatNumber,
   neuterQuestion,
   neuterYesLabel,
   parseNumber,
@@ -82,6 +79,8 @@ export default function AnimalForm() {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   // Refeições: segue a recomendação (idade, porte) até a pessoa mudar à mão.
   const [mealsTouched, setMealsTouched] = useState(!!editing);
+  // ?ver=1: a mesma ficha, só para ver (sem editar); "Editar" passa ao modo de edição.
+  const [readOnly, setReadOnly] = useState(!!editing && params.ver === '1');
   const isDog = form.species === 'dog';
   const female = form.sex === 'f';
 
@@ -97,8 +96,6 @@ export default function AnimalForm() {
   const animalForCalc = withAutoStage(form);
   const rec = recommendedMeals(form);
   const meals = mealsTouched ? form.meals : rec.value;
-  const kcal = dailyKcal(animalForCalc);
-  const displayName = form.name.trim() || (isDog ? 'o teu cão' : 'o teu gato');
 
   const errors = useMemo(() => {
     const e = [];
@@ -146,10 +143,14 @@ export default function AnimalForm() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen
         footer={
+          readOnly ? (
+            <Button icon="create-outline" title={`Editar ficha`} onPress={() => setReadOnly(false)} />
+          ) : (
           <View style={{ gap: 4 }}>
             <Button title={editing ? 'Guardar' : `Criar ${form.name.trim() || (isDog ? 'cão' : 'gato')}`} onPress={save} />
             {onboarding ? <Button variant="ghost" title="Saltar por agora" onPress={() => finishOnboarding('/procurar')} /> : null}
           </View>
+          )
         }
       >
         {onboarding ? (
@@ -159,12 +160,13 @@ export default function AnimalForm() {
         )}
 
         <View style={{ gap: 4 }}>
-          <Title size={28}>{editing ? `Editar ${editing.name}` : onboarding ? 'Adiciona um animal' : 'Novo animal'}</Title>
+          <Title size={28}>{readOnly ? `Ficha de ${editing.name}` : editing ? `Editar ${editing.name}` : onboarding ? 'Adiciona um animal' : 'Novo animal'}</Title>
           {onboarding ? (
             <Body muted size={14}>Assim calculamos quanto deve comer e avisamos quando a ração está a acabar.</Body>
           ) : null}
         </View>
 
+        <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: 16 }}>
         {/* Gato ou cão (só ao criar) */}
         {!editing ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -190,27 +192,31 @@ export default function AnimalForm() {
           </View>
         ) : null}
 
-        {/* Foto */}
-        <Pressable
-          onPress={() => choosePhoto((uri) => set({ photoUri: uri }), form.photoUri ? () => set({ photoUri: null }) : undefined)}
-          accessibilityRole="button"
-          accessibilityLabel={form.photoUri ? 'Mudar foto' : 'Adicionar foto'}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}
-        >
-          {form.photoUri ? (
-            <Avatar animal={form} size={84} />
-          ) : (
-            <View style={{ width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.dashed, backgroundColor: colors.coralTint, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="camera-outline" size={30} color={colors.coralDark} />
+        {/* Foto (no modo ver, só a foto) */}
+        {readOnly ? (
+          <Avatar animal={form} size={84} />
+        ) : (
+          <Pressable
+            onPress={() => choosePhoto((uri) => set({ photoUri: uri }), form.photoUri ? () => set({ photoUri: null }) : undefined)}
+            accessibilityRole="button"
+            accessibilityLabel={form.photoUri ? 'Mudar foto' : 'Adicionar foto'}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}
+          >
+            {form.photoUri ? (
+              <Avatar animal={form} size={84} />
+            ) : (
+              <View style={{ width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.dashed, backgroundColor: colors.coralTint, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="camera-outline" size={30} color={colors.coralDark} />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>{form.photoUri ? 'Mudar foto' : 'Adicionar foto'}</Text>
+              <Body muted size={13}>Tira uma agora ou escolhe da galeria. É opcional.</Body>
             </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }}>{form.photoUri ? 'Mudar foto' : 'Adicionar foto'}</Text>
-            <Body muted size={13}>Tira uma agora ou escolhe da galeria. É opcional.</Body>
-          </View>
-        </Pressable>
+          </Pressable>
+        )}
 
-        <SectionTitle>Sobre {form.name.trim() || (isDog ? 'o cão' : 'o gato')}</SectionTitle>
+        <SectionTitle>Nome e peso</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Field style={{ flex: 2 }} label="Nome" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : 'Luna'} maxLength={30} />
           <Field style={{ flex: 1 }} label="Peso (kg)" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder="4,2" keyboardType="decimal-pad" />
@@ -324,25 +330,7 @@ export default function AnimalForm() {
           </View>
         </View>
 
-        {/* Estimativa */}
-        <View style={{ backgroundColor: colors.coralTint, borderRadius: 16, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.coralTintText }}>Estimativa para {displayName}</Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText, marginTop: 2 }}>
-              {[female ? 'Fêmea' : 'Macho', describeAnimal(animalForCalc)].filter(Boolean).join(' ')}
-              {kcal ? ` · ≈ ${formatNumber(kcal)} kcal/dia` : ''}
-            </Text>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.coralDark }}>
-              {kcal ? `${formatNumber(kcal)} kcal` : '—'}
-            </Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText }}>
-              {kcal ? 'por dia' : 'indica o peso'}
-            </Text>
-          </View>
         </View>
-        <Body muted size={12} style={{ textAlign: 'center' }}>{editing ? 'A ração escolhe-se na ficha, em “Alimentação”.' : 'A seguir escolhes a ração na ficha.'} Estimativa de referência; confirma com o teu veterinário.</Body>
       </Screen>
     </KeyboardAvoidingView>
   );

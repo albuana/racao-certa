@@ -7,7 +7,6 @@ import WeighCard from '../../components/WeighCard';
 import { Avatar, BackButton, Body, Button, Card, Screen, Title } from '../../components/ui';
 import { animalStats, planIds } from '../../lib/household';
 import { ageText, conditionLabel, doseLooksHigh, formatEuro, formatNumber, neuterYesLabel, stageLabel, withAutoStage } from '../../lib/nutrition';
-import { choosePhoto } from '../../lib/photos';
 import { fitIssues } from '../../lib/fit';
 import { findProduct } from '../../data/products';
 import { fetchLivePrices, livePricesEnabled, pricesAreStale } from '../../lib/prices';
@@ -119,29 +118,25 @@ export default function AnimalDetail() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <View>
           <Avatar animal={animal} size={72} />
-          <Pressable
-            onPress={() =>
-              choosePhoto(
-                (uri) => saveAnimal({ ...stored, photoUri: uri }),
-                stored.photoUri ? () => saveAnimal({ ...stored, photoUri: null }) : undefined
-              )
-            }
-            accessibilityRole="button"
-            accessibilityLabel={`Mudar foto de ${animal.name}`}
-            style={{ position: 'absolute', right: -4, bottom: -4, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: colors.bg, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Ionicons name="camera-outline" size={16} color={colors.white} />
-          </Pressable>
         </View>
         <View style={{ flex: 1 }}>
           <Title size={30}>{animal.name}</Title>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          <Pressable
+            onPress={() => router.push({ pathname: '/animal/novo', params: { id: animal.id, ver: '1' } })}
+            accessibilityRole="button"
+            accessibilityLabel={`Ver a ficha de ${animal.name}`}
+            style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}
+          >
             {chips.map((c) => (
               <Text key={c} style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.text, backgroundColor: colors.card, borderColor: '#EED8D3', borderWidth: 1, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3, overflow: 'hidden' }}>
                 {c}
               </Text>
             ))}
-          </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20, backgroundColor: colors.coralTint }}>
+              <Ionicons name="eye-outline" size={14} color={colors.navy} />
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.navy }}>Ver ficha</Text>
+            </View>
+          </Pressable>
         </View>
       </View>
 
