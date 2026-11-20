@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { BODY_CONDITIONS, bodyCondition, formatNumber, parseNumber } from '../lib/nutrition';
 import { colors, fonts } from '../theme';
-import { Body, Button, Card, Chip } from './ui';
+import BodyConditionPicker from './BodyConditionPicker';
+import { Body, Button, Card } from './ui';
 
 export const WEIGH_EVERY_DAYS = 21;
 
@@ -79,13 +80,7 @@ export default function WeighCard({ animal, onSave }) {
             />
             <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted }}>kg</Text>
           </View>
-          <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.text }}>Como está o corpo {female ? 'dela' : 'dele'}?</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {BODY_CONDITIONS.map((b) => (
-              <Chip key={b.id} label={female ? b.labelF : b.label} active={bcs === b.id} onPress={() => setBcs(b.id)} />
-            ))}
-          </View>
-          <Body muted size={12}>{BODY_CONDITIONS.find((b) => b.id === bcs)?.hint}</Body>
+          <BodyConditionPicker label={`Como está o corpo ${female ? 'dela' : 'dele'}?`} species={animal.species} female={female} value={bcs} onChange={setBcs} />
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button variant="ghost" title="Cancelar" onPress={() => setOpen(false)} style={{ flex: 1 }} />
             <Button title="Guardar" onPress={save} disabled={!(parseNumber(kg) > 0)} style={{ flex: 1 }} />

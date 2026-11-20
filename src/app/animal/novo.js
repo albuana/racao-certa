@@ -21,12 +21,12 @@ import {
   Title,
 } from '../../components/ui';
 import BirthDateField from '../../components/BirthDateField';
+import BodyConditionPicker from '../../components/BodyConditionPicker';
 import FeedingPlan from '../../components/FeedingPlan';
 import { planIds, splitPlan } from '../../lib/household';
 import { findProduct } from '../../data/products';
 import { choosePhoto } from '../../lib/photos';
 import {
-  BODY_CONDITIONS,
   DOG_SIZES,
   bodyCondition,
   HEALTH_CONDITIONS,
@@ -288,11 +288,12 @@ export default function AnimalForm() {
           options={isDog ? [{ value: false, label: 'Calmo' }, { value: true, label: 'Muito ativo' }] : [{ value: false, label: 'Interior' }, { value: true, label: 'Vai à rua' }]}
         />
         {/* Condição corporal: é assim que o veterinário ajusta a dose */}
-        <OptionGrid
+        <BodyConditionPicker
           label={`Como está o corpo ${female ? 'dela' : 'dele'}?`}
+          species={form.species}
+          female={female}
           value={bodyCondition(form)}
           onChange={(bcs) => set({ bcs, goal: bcs === 'over' ? 'lose' : 'keep' })}
-          options={BODY_CONDITIONS.map((b) => ({ value: b.id, label: female ? b.labelF : b.label, hint: b.hint }))}
         />
         {bodyCondition(form) === 'over' && animalForCalc.stage === 'junior' ? (
           <Body muted size={12}>Nos júnior não se corta a comida: fala com o veterinário sobre o peso.</Body>
