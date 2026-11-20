@@ -101,7 +101,7 @@ export default function AnimalDetail() {
         style: 'destructive',
         onPress: () => {
           removeAnimal(animal.id);
-          router.replace(animals.length > 1 ? '/inicio' : '/especie');
+          router.replace('/inicio');
         },
       },
     ]);

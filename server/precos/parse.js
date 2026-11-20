@@ -93,7 +93,32 @@ export const PT_STORES = [
   'Miscota',
   'Worten',
   'Amazon',
+  'ZU',
+  'Maxi Zoo',
+  'Goldpet',
+  'Petness',
+  'Animalis',
+  'Petlove',
+  'Clinicalvet',
+  'Mundo Animal',
 ];
+
+// Pesquisa no site de cada loja conhecida: quando o Google não dá o link direto, abrimos a pesquisa da loja.
+export const STORE_SEARCH_URLS = {
+  Continente: (q) => `https://www.continente.pt/pesquisa/?q=${encodeURIComponent(q)}`,
+  Auchan: (q) => `https://www.auchan.pt/pt/pesquisa?q=${encodeURIComponent(q)}`,
+  'Pingo Doce': (q) => `https://www.pingodoce.pt/pesquisa/?q=${encodeURIComponent(q)}`,
+  Intermarché: (q) => `https://www.intermarche.pt/pesquisa?q=${encodeURIComponent(q)}`,
+  'El Corte Inglés': (q) => `https://www.elcorteingles.pt/pesquisar/?term=${encodeURIComponent(q)}`,
+  Zooplus: (q) => `https://www.zooplus.pt/search/results?q=${encodeURIComponent(q)}`,
+  Kiwoko: (q) => `https://www.kiwoko.pt/busca?q=${encodeURIComponent(q)}`,
+  Tiendanimal: (q) => `https://www.tiendanimal.pt/pesquisa?q=${encodeURIComponent(q)}`,
+  Bitiba: (q) => `https://www.bitiba.pt/search/results?q=${encodeURIComponent(q)}`,
+  Miscota: (q) => `https://www.miscota.pt/search?q=${encodeURIComponent(q)}`,
+  Worten: (q) => `https://www.worten.pt/pesquisa?query=${encodeURIComponent(q)}`,
+  ZU: (q) => `https://www.zu.pt/pesquisa?q=${encodeURIComponent(q)}`,
+  'Maxi Zoo': (q) => `https://www.maxizoo.pt/search/?text=${encodeURIComponent(q)}`,
+};
 
 // Normaliza o nome da loja ("Continente.pt", "continente online" → "Continente").
 export function storeName(source = '') {

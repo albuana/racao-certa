@@ -24,7 +24,7 @@ create policy "criar a minha casa" on public.casas
   for insert to authenticated with check ((select auth.uid()) = user_id);
 
 drop policy if exists "alterar a minha casa" on public.casas;
-create policy "alterar a minha casa" on public.casas
+create policy "alterar a minha casa" on public.casas 
   for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 drop policy if exists "apagar a minha casa" on public.casas;

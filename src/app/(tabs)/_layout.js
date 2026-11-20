@@ -20,10 +20,12 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Tabs.Screen name="inicio" options={{ title: 'Início', tabBarIcon: icon('home') }} />
+      <Tabs.Screen name="procurar" options={{ title: 'Procurar', tabBarIcon: icon('search') }} />
+      <Tabs.Screen name="inicio" options={{ title: 'A minha casa', tabBarIcon: icon('home') }} />
       {/* Os animais estão no Início; este ecrã fica escondido do rodapé. */}
       <Tabs.Screen name="animais" options={{ href: null }} />
-      <Tabs.Screen name="precos" options={{ title: 'Preços', tabBarIcon: icon('pricetag') }} />
+      {/* As rações da casa e os preços estão agora no Procurar. */}
+      <Tabs.Screen name="precos" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ title: 'Perfil', tabBarIcon: icon('person') }} />
     </Tabs>
   );

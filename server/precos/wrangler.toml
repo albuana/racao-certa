@@ -8,3 +8,7 @@ compatibility_date = "2026-11-01"
 [[kv_namespaces]]
 binding = "PRECOS"
 id = "490303d2bff74ef99506ba0f7de36185"
+
+# Verificação diária das lojas (06:17 UTC). Resultado em /saude.
+[triggers]
+crons = ["17 6 * * *"]

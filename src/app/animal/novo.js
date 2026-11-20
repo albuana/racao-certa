@@ -4,6 +4,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import {
   Avatar,
@@ -132,10 +133,19 @@ export default function AnimalForm() {
       stage: animalForCalc.stage,
       productId: null,
     });
-    if (onboarding) router.replace('/inicio');
+    if (onboarding) finishOnboarding('/inicio');
     else if (editing) router.back();
     else router.replace({ pathname: '/animal/[id]', params: { id } });
   };
+
+  // Fim do início: limpa os ecrãs para trás (login, casa) para não se voltar a eles sem querer.
+  const finishOnboarding = (to) => {
+    if (router.canDismiss()) router.dismissAll();
+    router.replace(to);
+  };
+
+  // Mudar entre gato e cão: o porte só existe nos cães e a fase volta a ser calculada.
+  const setSpecies = (species) => onBirth({ species, size: form.size || 'medium' });
 
   const openPicker = (slot) =>
     router.push({
@@ -145,15 +155,51 @@ export default function AnimalForm() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen footer={<Button title={editing ? 'Guardar' : `Criar ${form.name.trim() || (isDog ? 'cão' : 'gato')}`} onPress={save} />}>
-        {onboarding ? <StepHeader step={3} /> : <BackButton />}
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Title size={28}>{editing ? `Editar ${editing.name}` : isDog ? 'O teu cão' : 'O teu gato'}</Title>
-          <View style={{ backgroundColor: colors.coralTint, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.coralTintText }}>{SPECIES[form.species].label}</Text>
+      <Screen
+        footer={
+          <View style={{ gap: 4 }}>
+            <Button title={editing ? 'Guardar' : `Criar ${form.name.trim() || (isDog ? 'cão' : 'gato')}`} onPress={save} />
+            {onboarding ? <Button variant="ghost" title="Saltar por agora" onPress={() => finishOnboarding('/procurar')} /> : null}
           </View>
+        }
+      >
+        {onboarding ? (
+          <StepHeader step={2} total={2} onBack={() => (router.canGoBack() ? router.back() : router.replace('/casa'))} />
+        ) : (
+          <BackButton />
+        )}
+
+        <View style={{ gap: 4 }}>
+          <Title size={28}>{editing ? `Editar ${editing.name}` : onboarding ? 'Adiciona um animal' : 'Novo animal'}</Title>
+          {onboarding ? (
+            <Body muted size={14}>Assim calculamos quanto deve comer e avisamos quando a ração está a acabar.</Body>
+          ) : null}
         </View>
+
+        {/* Gato ou cão (só ao criar) */}
+        {!editing ? (
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {[
+              { id: 'cat', icon: 'cat' },
+              { id: 'dog', icon: 'dog' },
+            ].map((o) => {
+              const on = form.species === o.id;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSpecies(o.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={SPECIES[o.id].label}
+                  style={{ flex: 1, minHeight: 64, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: on ? colors.coralTint : colors.card, borderWidth: on ? 2 : 1, borderColor: on ? colors.navy : colors.borderStrong }}
+                >
+                  <MaterialCommunityIcons name={o.icon} size={30} color={on ? colors.navy : colors.text} />
+                  <Text style={{ fontFamily: fonts.display, fontSize: 18, color: on ? colors.navy : colors.text }}>{SPECIES[o.id].label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         {/* Foto */}
         <Pressable
@@ -175,6 +221,7 @@ export default function AnimalForm() {
           </View>
         </Pressable>
 
+        <SectionTitle>Sobre {form.name.trim() || (isDog ? 'o cão' : 'o gato')}</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Field style={{ flex: 2 }} label="Nome" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : 'Luna'} maxLength={30} />
           <Field style={{ flex: 1 }} label="Peso (kg)" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder="4,2" keyboardType="decimal-pad" />
@@ -189,6 +236,7 @@ export default function AnimalForm() {
           />
         ) : null}
 
+        <SectionTitle>Idade</SectionTitle>
         <View>
           <BirthDateField
             value={form.birthDate}
@@ -205,6 +253,7 @@ export default function AnimalForm() {
           />
         </View>
 
+        <SectionTitle>Dia a dia</SectionTitle>
         <Segmented
           label="Sexo"
           value={form.sex}
@@ -242,6 +291,7 @@ export default function AnimalForm() {
         ) : null}
 
         {/* Problemas de saúde */}
+        <SectionTitle>Saúde</SectionTitle>
         <View>
           <Label>Problemas de saúde (opcional)</Label>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -273,8 +323,8 @@ export default function AnimalForm() {
         </View>
 
         {/* Plano de alimentação: seca e/ou húmida */}
+        <SectionTitle>Alimentação (podes escolher depois)</SectionTitle>
         <View>
-          <Label>Alimentação</Label>
           <FeedingPlan
             stats={plan}
             products={{ dry: dryProduct, wet: wetProduct }}
@@ -313,6 +363,14 @@ export default function AnimalForm() {
         <Body muted size={12} style={{ textAlign: 'center' }}>Estimativa de referência. Confirma com o teu veterinário.</Body>
       </Screen>
     </KeyboardAvoidingView>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <Text style={{ fontFamily: fonts.displaySemi, fontSize: 18, color: colors.text, marginTop: 8, marginBottom: -4 }} accessibilityRole="header">
+      {children}
+    </Text>
   );
 }
 

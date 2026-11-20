@@ -13,6 +13,7 @@ const EMPTY = {
   house: null, // { name, updatedAt }
   animals: [], // ver criarAnimal() em src/app/animal/novo.js
   customProducts: [], // rações adicionadas
+  favorites: [], // rações guardadas: { key, query, name, image, type, kg, target, history, best, notifiedPrice }
   deleted: [], // [{ id, at }] — para um animal apagado não voltar noutro telemóvel
 };
 
@@ -110,7 +111,7 @@ export function StoreProvider({ children }) {
       }
     }, 1500);
     return () => clearTimeout(pushTimer.current);
-  }, [userId, state.house, state.animals, state.customProducts, state.deleted]);
+  }, [userId, state.house, state.animals, state.customProducts, state.deleted, state.favorites]);
 
   const continueAsGuest = useCallback(() => {
     setState((s) => ({ ...s, account: { mode: 'guest' } }));
@@ -195,6 +196,40 @@ export function StoreProvider({ children }) {
     }));
   }, []);
 
+  // ⭐ Favoritas
+  const toggleFavorite = useCallback((group) => {
+    setState((s) => {
+      const list = s.favorites || [];
+      if (list.some((f) => f.key === group.key)) {
+        return {
+          ...s,
+          favorites: list.filter((f) => f.key !== group.key),
+          deleted: [{ id: `fav:${group.key}`, at: now() }, ...(s.deleted || [])].slice(0, 500),
+        };
+      }
+      const best = group.best ? { price: group.best.price, unitValue: group.best.unitValue, store: group.best.store, link: group.best.link } : null;
+      const fav = {
+        key: group.key,
+        query: group.name,
+        name: group.name,
+        brand: group.brand || '',
+        image: group.image || null,
+        type: group.type,
+        species: group.species || null,
+        kg: group.kg || null,
+        target: null,
+        best,
+        history: best ? [{ d: now().slice(0, 10), price: best.unitValue, store: best.store }] : [],
+        updatedAt: now(),
+      };
+      return { ...s, favorites: [fav, ...list], deleted: (s.deleted || []).filter((d) => d.id !== `fav:${group.key}`) };
+    });
+  }, []);
+
+  const updateFavorite = useCallback((key, changes) => {
+    setState((s) => ({ ...s, favorites: (s.favorites || []).map((f) => (f.key === key ? { ...f, ...changes, updatedAt: now() } : f)) }));
+  }, []);
+
   const resetAll = useCallback(async () => {
     setState(EMPTY);
     try {
@@ -221,6 +256,8 @@ export function StoreProvider({ children }) {
       openBag,
       addCustomProduct,
       updateProductOffers,
+      toggleFavorite,
+      updateFavorite,
       resetAll,
     }),
     [
@@ -238,6 +275,8 @@ export function StoreProvider({ children }) {
       openBag,
       addCustomProduct,
       updateProductOffers,
+      toggleFavorite,
+      updateFavorite,
       resetAll,
     ]
   );

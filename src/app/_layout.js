@@ -32,7 +32,11 @@ function RootStack() {
   if (!done) return null;
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      {/* Do ecrã principal e do login não se volta para trás com o gesto. */}
+      <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="login" options={{ gestureEnabled: false }} />
+    </Stack>
   );
 }
 

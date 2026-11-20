@@ -2,6 +2,7 @@
 // Cada leitor devolve uma lista de { store, name, brand, price, perKg, kg, url, category }.
 // Afinados com páginas reais guardadas em ./amostras (ver recolher.sh).
 
+import { parseKg } from './parse.js';
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 
@@ -46,13 +47,18 @@ function perKgFrom(text) {
 
 // Imagem do produto: data-src (imagens com carregamento diferido) ou src; tamanho ~300 px.
 function imageFrom(chunk) {
-  const m = /<img[^>]*?\sdata-src="(https:[^"]+)"/.exec(chunk) || /<img[^>]*?\ssrc="(https:[^"]+)"/.exec(chunk);
-  if (!m) return null;
-  return decode(m[1]).replace(/([?&])sw=\d+/, '$1sw=300').replace(/([?&])sh=\d+/, '$1sh=300');
+  const BAD = /google[-_ ]?play|app[-_ ]?store|badge|selo|seal|pvpr|etiqueta|promo|logo|icon|sprite|flag|bandeira|banner|placeholder|data:image/i;
+  const urls = [...chunk.matchAll(/<img[^>]*?\s(?:data-src|src)="(https:[^"]+)"/g)].map((m) => decode(m[1])).filter((u) => !BAD.test(u));
+  // Fotos de produto dos sites Salesforce (Continente, Pingo Doce, Auchan) passam por /dw/image/ ou /images/.
+  const pick = urls.find((u) => /\/dw\/image\/|\/images\/|\/produtos?\//i.test(u)) || urls[0];
+  if (!pick) return null;
+  return pick.replace(/([?&])sw=\d+/, '$1sw=300').replace(/([?&])sh=\d+/, '$1sh=300');
 }
 
 function finish(item) {
   if (!item.price || !item.name) return null;
+  // "Desde X €" (vários tamanhos): não se adivinha o peso a partir do €/kg mais baixo.
+  if (item.from) return item.perKg || item.kg ? item : null;
   if (!item.kg && item.perKg) item.kg = Math.round((item.price / item.perKg) * 100) / 100;
   if (!item.perKg && item.kg) item.perKg = item.price / item.kg;
   return item.perKg ? item : null;
@@ -149,6 +155,103 @@ export function parsePingoDoce(html) {
   return out;
 }
 
+
+// ---------- Tiendanimal e Kiwoko (a mesma empresa e o mesmo site, Salesforce Commerce Cloud) ----------
+// Cada cartão pode ter vários tamanhos: "19.69€-146.98€" e "Desde 8.37€ / kg".
+function parseIskCards(store) {
+  return (html) => {
+    const out = [];
+    for (const chunk of html.split('class="isk-product-card ').slice(1)) {
+      const card = chunk.slice(0, 12000);
+      const name = /data-product-name="([^"]+)"/.exec(card);
+      const brand = /data-brand="([^"]*)"/.exec(card);
+      const url = /data-url="([^"]+)"/.exec(card);
+      const min = /data-min-price="([\d.]+)"/.exec(card);
+      const priceText = /js-isk-product-card-price"[\s\S]*?>([\s\S]*?)<\/div>/.exec(card);
+      const pum = /data-afi="common-product-card-pum"\s*>([^<]+)</.exec(card);
+      const options = /common-product-card-options">\s*(\d+)/.exec(card);
+      const several = (options && Number(options[1]) > 1) || /price-divider/.test(priceText?.[1] || '');
+      const title = name ? decode(name[1]) : '';
+      const item = finish({
+        store,
+        name: title,
+        brand: brand ? decode(brand[1]) : '',
+        category: decode((/data-cat="([^"]*)"/.exec(card) || [])[1] || ''),
+        price: num(min?.[1]),
+        perKg: pum ? perKgFrom(decode(pum[1]).replace(/desde\s*/i, '')) : null,
+        kg: several ? parseKg(title) : null,
+        from: several,
+        url: url ? decode(url[1]) : null,
+        image: imageFrom(card),
+      });
+      if (item) out.push(item);
+    }
+    return out;
+  };
+}
+export const parseTiendanimal = parseIskCards('Tiendanimal');
+export const parseKiwoko = parseIskCards('Kiwoko');
+
+// ---------- Zooplus (Next.js; um cartão por tamanho, ex.: "2 x 3,5 kg") ----------
+export function parseZooplus(html) {
+  const out = [];
+  const re = /<a data-zta="product-info" href="([^"]+)"[^>]*>\s*<h2[^>]*>\s*<span[^>]*>([^<]+)<\/span>\s*<p[^>]*data-zta="variant-desc"[^>]*>([\s\S]*?)<\/p>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const after = html.slice(m.index, m.index + 6000);
+    const before = html.slice(Math.max(0, m.index - 6000), m.index);
+    const price = /itemProp="price" content="([\d.]+)"/.exec(after);
+    const perKg = /(\d+(?:,\d+)?)\s*€\s*\/\s*kg/.exec(after);
+    const imgs = [...before.matchAll(/<img src="(https:\/\/media\.zooplus\.com[^"]+)"/g)];
+    const name = decode(m[2]).trim();
+    const desc = decode(m[3].replace(/<!--.*?-->/g, '')).trim();
+    const item = finish({
+      store: 'Zooplus',
+      name: desc ? `${name} ${desc}` : name,
+      brand: '',
+      category: decode(m[1]).split('?')[0].replace(/\//g, ' '),
+      price: num(price?.[1]),
+      perKg: perKg ? num(perKg[1]) : null,
+      kg: parseKg(desc),
+      url: `https://www.zooplus.pt${decode(m[1])}`,
+      image: imgs.length ? imgs[imgs.length - 1][1] : null,
+    });
+    if (item) out.push(item);
+  }
+  return out;
+}
+
+// ---------- Miscota (preço mais baixo de vários tamanhos: "Desde") ----------
+export function parseMiscota(html) {
+  const out = [];
+  for (const chunk of html.split('<li class="prod__box ').slice(1)) {
+    const card = chunk.slice(0, 8000);
+    const link = /<a href="(https:\/\/www\.miscota\.pt\/[^"]+)" title="([^"]+)"/.exec(card);
+    const brand = /prod-name--brand">([^<]*)</.exec(card);
+    const price = /prod__box--price">\s*(\d+)\s*<span>\s*,(\d+)/.exec(card);
+    const variants = /<span>opções:<\/span>([^<]+)</.exec(card);
+    const img = /data-original="(https:[^"]+)"/.exec(card);
+    if (!link || !price) continue;
+    const title = decode(link[2]);
+    const several = variants ? variants[1].split('-').length > 1 : false;
+    const kg = parseKg(title) || (!several && variants ? parseKg(variants[1]) : null);
+    const p = num(`${price[1]}.${price[2]}`);
+    out.push({
+      store: 'Miscota',
+      name: title,
+      brand: brand ? decode(brand[1]) : '',
+      category: link[1].replace('https://www.miscota.pt/', '').replace(/\//g, ' '),
+      price: p,
+      kg: several ? null : kg,
+      perKg: !several && kg ? p / kg : null,
+      from: several,
+      url: link[1],
+      image: img ? img[1] : null,
+    });
+  }
+  return out;
+}
+
 export const STORE_SEARCH = {
   Continente: { url: (q) => `https://www.continente.pt/pesquisa/?q=${encodeURIComponent(q)}`, parse: parseContinente },
   Auchan: { url: (q) => `https://www.auchan.pt/pt/pesquisa?q=${encodeURIComponent(q)}`, parse: parseAuchan },
@@ -156,6 +259,10 @@ export const STORE_SEARCH = {
     url: (q) => `https://www.pingodoce.pt/on/demandware.store/Sites-pingo-doce-Site/default/Search-Show?q=${encodeURIComponent(q)}`,
     parse: parsePingoDoce,
   },
+  Kiwoko: { url: (q) => `https://www.kiwoko.pt/busca?q=${encodeURIComponent(q)}`, parse: parseKiwoko },
+  Tiendanimal: { url: (q) => `https://www.tiendanimal.pt/pesquisa?q=${encodeURIComponent(q)}`, parse: parseTiendanimal },
+  Zooplus: { url: (q) => `https://www.zooplus.pt/search/results?q=${encodeURIComponent(q)}`, parse: parseZooplus },
+  Miscota: { url: (q) => `https://www.miscota.pt/search?q=${encodeURIComponent(q)}`, parse: parseMiscota },
 };
 
 export async function fetchHtml(url, ms = 12000) {

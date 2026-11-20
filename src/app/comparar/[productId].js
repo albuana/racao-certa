@@ -4,15 +4,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, Text, View } from 'react-native';
-import { BackButton, Body, Button, Card, Screen, Segmented, Title } from '../../components/ui';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { BackButton, Body, Button, Card, Chip, Screen, Segmented, Title } from '../../components/ui';
 import { findProduct } from '../../data/products';
 import { gramsOfProduct } from '../../lib/household';
 import { priceSearchUrl, typicalKcalPerKg } from '../../lib/lookup';
 import { formatEuro, formatNumber, withAutoStage } from '../../lib/nutrition';
-import { fetchLivePrices, fetchSuggestions, livePricesEnabled, mergeOffers, pricesAreStale } from '../../lib/prices';
+import { bagKgFromQuantity, fetchLivePrices, fetchSuggestions, livePricesEnabled, mergeOffers, pricesAreStale } from '../../lib/prices';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
+
+// Só se compara saco com saco do mesmo peso (±4%). Sem peso conhecido ("vários tamanhos") fica de fora.
+const sizeOf = (x) => (x.kg > 0 && !x.desde ? x.kg : null);
+const sameSize = (a, b) => a && b && Math.abs(a - b) / Math.max(a, b) <= 0.04;
+const kgText = (kg) => `${formatNumber(kg, kg % 1 ? 1 : 0)} kg`;
 
 function seenText(iso) {
   if (!iso) return '';
@@ -26,6 +31,7 @@ export default function Comparar() {
   const { productId } = useLocalSearchParams();
   const { animals, customProducts, updateProductOffers } = useStore();
   const [sort, setSort] = useState('all'); // 'all' | 'day'
+  const [size, setSize] = useState(null); // peso escolhido (kg); null = o da tua ração
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
@@ -120,8 +126,25 @@ export default function Comparar() {
     while (queues.some((q) => q.length)) for (const q of queues) if (q.length) mixed.push(q.shift());
     items = [...mine, ...mixed];
   }
+  // Pesos disponíveis (juntando os que são quase iguais) e o peso que se está a comparar.
+  const sizes = [];
+  for (const x of [...mine, ...alternatives]) {
+    const k = sizeOf(x);
+    if (!k) continue;
+    const found = sizes.find((sz) => sameSize(sz.kg, k));
+    if (found) found.count += 1;
+    else sizes.push({ kg: k, count: 1 });
+  }
+  sizes.sort((a, b) => a.kg - b.kg);
+  const ownKg = bagKgFromQuantity(product.quantity) || sizeOf(mine[0] || {}) || sizes.sort((a, b) => b.count - a.count)[0]?.kg || null;
+  sizes.sort((a, b) => a.kg - b.kg);
+  const activeKg = size || (sizes.find((sz) => sameSize(sz.kg, ownKg))?.kg ?? sizes[0]?.kg ?? null);
+  const unknownSize = items.filter((it) => !sizeOf(it)).length;
+  if (activeKg) items = items.filter((it) => sameSize(sizeOf(it), activeKg));
+  if (sort === 'all') items = [...items.filter((x) => x.current), ...items.filter((x) => !x.current).sort((a, b) => a.price - b.price)];
   items = items.slice(0, 40);
-  const cheapest = [...mine, ...alternatives].filter((x) => x.perDay != null).sort((a, b) => a.perDay - b.perDay)[0];
+  const pool = activeKg ? [...mine, ...alternatives].filter((x) => sameSize(sizeOf(x), activeKg)) : [...mine, ...alternatives];
+  const cheapest = pool.filter((x) => x.perDay != null).sort((a, b) => a.perDay - b.perDay)[0];
 
 
 
@@ -162,6 +185,16 @@ export default function Comparar() {
 
       {items.length > 0 ? (
         <>
+          {sizes.length ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }}>Comparar sacos de</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {sizes.map((sz) => (
+                  <Chip key={sz.kg} label={`${kgText(sz.kg)} (${sz.count})`} active={sameSize(sz.kg, activeKg)} onPress={() => setSize(sz.kg)} />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           <Segmented
             value={sort}
             onChange={setSort}
@@ -172,8 +205,9 @@ export default function Comparar() {
           />
           <Body muted size={12}>
             {sort === 'day'
-              ? `Ordenadas pelo custo por dia${names.length ? ` para ${names.join(' e ')}` : ''}, com as mesmas calorias. Toca para ver na loja.`
-              : 'Esta ração nas várias lojas e outras do mesmo tipo nos supermercados e lojas de animais. Toca para ver na loja.'}
+              ? `Sacos de ${activeKg ? kgText(activeKg) : 'todos os pesos'}, pelo custo por dia${names.length ? ` para ${names.join(' e ')}` : ''}. Toca para ver na loja.`
+              : `Só sacos de ${activeKg ? kgText(activeKg) : 'todos os pesos'}, do mais barato para o mais caro. Toca para ver na loja.`}
+            {unknownSize ? ` ${unknownSize} sem peso indicado pela loja não entram.` : ''}
           </Body>
           {sort === 'day' && cheapest && bestDay != null && !cheapest.current && bestDay - cheapest.perDay > 0.01 ? (
             <View style={{ backgroundColor: colors.alertBg, borderRadius: 14, padding: 14 }}>
@@ -206,13 +240,18 @@ export default function Comparar() {
                   </View>
                   <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.text }} numberOfLines={2}>{it.name}</Text>
                   <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted }}>
-                    {it.store} · {formatNumber(it.kg, it.kg % 1 ? 1 : 0)} kg · {formatEuro(it.price)}{it.gramsDay ? ` · ${formatNumber(it.gramsDay)} g/dia` : ''}
+                    {it.store} · {sizeOf(it) ? kgText(it.kg) : 'vários tamanhos'}
+                    {it.perDay != null ? ` · ${formatEuro(it.perDay)}/dia` : ''}
+                    {it.gramsDay ? ` · ${formatNumber(it.gramsDay)} g/dia` : ''}
                   </Text>
                   {it.current && originLine(it) ? <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted }}>{originLine(it)}</Text> : null}
                 </View>
-                <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.coralDark }}>
-                  {it.perDay != null ? `${formatEuro(it.perDay)}/dia` : `${formatEuro(it.perKg)}/kg`}
-                </Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: fonts.display, fontSize: 17, color: colors.coralDark }}>
+                    {sort === 'day' && it.perDay != null ? `${formatEuro(it.perDay)}` : formatEuro(it.price)}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted }}>{sort === 'day' && it.perDay != null ? 'por dia' : 'o saco'}</Text>
+                </View>
               </Pressable>
             ))}
           </Card>

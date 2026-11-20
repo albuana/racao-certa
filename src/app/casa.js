@@ -16,13 +16,16 @@ export default function Casa() {
   const next = () => {
     if (!valid) return;
     setHouseName(name.trim());
-    router.push(animals.length ? '/inicio' : '/especie');
+    if (animals.length) {
+      if (router.canDismiss()) router.dismissAll();
+      router.replace('/procurar');
+    } else router.push('/animal/novo');
   };
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen footer={<Button title="Continuar" onPress={next} disabled={!valid} />} contentStyle={{ paddingHorizontal: 24 }}>
-        <StepHeader step={1} onBack={() => router.replace('/login')} />
+        <StepHeader step={1} total={2} onBack={() => router.replace('/login')} />
         <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.coralTint, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="home-outline" size={28} color={colors.navy} />
         </View>

@@ -71,3 +71,11 @@ test('preço visto na loja: validação', () => {
   assert.equal(cleanReport({ store: 'Lidl', price: 0, kg: 2 }), null);
   assert.equal(cleanReport({ store: 'Lidl', price: 10, kg: 99 }), null);
 });
+
+test('preço errado: a mesma oferta dá sempre a mesma chave, outro preço dá outra', async () => {
+  const { offerHash, checkItem } = await import('./index.js');
+  assert.equal(offerHash('Kiwoko', 'Purina One Junior 2,8 kg', 23.15), offerHash('Kiwoko', 'purina one junior 2,8kg', 23.15));
+  assert.notEqual(offerHash('Kiwoko', 'Purina One Junior', 23.15), offerHash('Kiwoko', 'Purina One Junior', 21.99));
+  assert.deepEqual(checkItem({ price: 10, perKg: 5, url: 'https://www.kiwoko.pt/x', image: 'https://img/x.jpg' }), []);
+  assert.ok(checkItem({ price: 10, perKg: 5, url: 'https://www.google.pt/shopping/1', image: 'https://img/x.jpg' }).includes('link não abre a loja'));
+});

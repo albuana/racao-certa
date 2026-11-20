@@ -1,9 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import AnimalRow from '../../components/AnimalRow';
 import { Banner, Body, Screen, Title } from '../../components/ui';
-import { householdTotals, nextToRunOut } from '../../lib/household';
+import { animalStats, householdTotals, nextToRunOut } from '../../lib/household';
+import { scheduleRunOutReminders } from '../../lib/notify';
 import { formatEuro, formatNumber } from '../../lib/nutrition';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
@@ -20,11 +22,22 @@ export default function Inicio() {
   const totals = householdTotals(animals, customProducts);
   const alert = nextToRunOut(animals, customProducts);
 
+  // 📦 Lembrete 2 dias antes de a ração seca de cada animal acabar.
+  useFocusEffect(
+    useCallback(() => {
+      const items = animals.map((a) => {
+        const st = animalStats(a, customProducts);
+        return { animalId: a.id, name: a.name, daysLeft: st.daysLeft, store: st.dry?.offer?.store || st.offer?.store };
+      });
+      scheduleRunOutReminders(items);
+    }, [animals, customProducts])
+  );
+
   return (
     <Screen>
       <View>
         <Body muted size={14}>{greeting()}{house?.name ? ` · ${house.name}` : ''}</Body>
-        <Title size={30}>Os teus animais</Title>
+        <Title size={30}>A minha casa</Title>
       </View>
 
       <View style={{ backgroundColor: colors.navy, borderRadius: 20, padding: 18, gap: 14 }}>
@@ -60,7 +73,7 @@ export default function Inicio() {
           <AnimalRow key={a.id} animal={a} />
         ))}
         <Pressable
-          onPress={() => router.push('/especie')}
+          onPress={() => router.push('/animal/novo')}
           accessibilityRole="button"
           style={({ pressed }) => ({ borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.dashed, borderRadius: 16, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: pressed ? colors.coralTint : 'transparent' })}
         >

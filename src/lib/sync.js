@@ -7,6 +7,7 @@ export function syncedPart(state) {
     house: state.house || null,
     animals: state.animals || [],
     customProducts: state.customProducts || [],
+    favorites: state.favorites || [],
     deleted: state.deleted || [],
   };
 }
@@ -43,12 +44,21 @@ export function mergeHouseData(local, remote) {
   const deleted = [...deletedMap.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 500);
   const deletedIds = new Set(deleted.map((d) => d.id));
 
+  // Favoritas: por chave, fica a alterada mais recentemente; as tiradas noutro telemóvel saem pela lista de apagados.
+  const favMap = new Map();
+  for (const f of [...r.favorites, ...l.favorites]) {
+    if (!f?.key || deletedIds.has(`fav:${f.key}`)) continue;
+    const prev = favMap.get(f.key);
+    if (!prev || String(f.updatedAt || '') >= String(prev.updatedAt || '')) favMap.set(f.key, f);
+  }
+
   const house = r.house?.name ? (newer(l.house, r.house, 'updatedAt') ? l.house : r.house) : l.house;
 
   return {
     house,
     animals: mergeById(r.animals, l.animals, 'updatedAt', deletedIds),
     customProducts: mergeById(r.customProducts, l.customProducts, 'pricesUpdatedAt', deletedIds),
+    favorites: [...favMap.values()],
     deleted,
   };
 }
