@@ -2,8 +2,8 @@
 // Parâmetros: species ('cat' | 'dog') para criar, id para editar.
 
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo, useState } from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import {
@@ -22,9 +22,7 @@ import {
 } from '../../components/ui';
 import BirthDateField from '../../components/BirthDateField';
 import BodyConditionPicker from '../../components/BodyConditionPicker';
-import FeedingPlan from '../../components/FeedingPlan';
-import { planIds, splitPlan } from '../../lib/household';
-import { findProduct } from '../../data/products';
+import { planIds } from '../../lib/household';
 import { choosePhoto } from '../../lib/photos';
 import {
   DOG_SIZES,
@@ -32,7 +30,6 @@ import {
   HEALTH_CONDITIONS,
   SPECIES,
   dailyKcal,
-  doseLooksHigh,
   describeAnimal,
   formatNumber,
   neuterQuestion,
@@ -49,7 +46,7 @@ import { colors, fonts } from '../../theme';
 
 export default function AnimalForm() {
   const params = useLocalSearchParams();
-  const { animals, saveAnimal, customProducts, pickedProductId, setPickedProductId } = useStore();
+  const { animals, saveAnimal, customProducts } = useStore();
   const editing = params.id ? animals.find((a) => a.id === params.id) : null;
   const onboarding = animals.length === 0;
 
@@ -88,19 +85,6 @@ export default function AnimalForm() {
   const isDog = form.species === 'dog';
   const female = form.sex === 'f';
 
-  // Quando se volta do seletor de ração, aplica a escolha.
-  useFocusEffect(
-    useCallback(() => {
-      if (pickedProductId) {
-        const id = typeof pickedProductId === 'object' ? pickedProductId.id : pickedProductId;
-        const p = findProduct(id, customProducts);
-        const slot = typeof pickedProductId === 'object' ? pickedProductId.slot : p?.type === 'wet' ? 'wet' : 'dry';
-        setForm((f) => ({ ...f, [slot === 'wet' ? 'wetProductId' : 'dryProductId']: id }));
-        setPickedProductId(null);
-      }
-    }, [pickedProductId, setPickedProductId, customProducts])
-  );
-
   // A idade (se for dada) escolhe a fase de vida automaticamente.
   // A data de nascimento (se for dada) escolhe a fase de vida automaticamente.
   const onBirth = (patch) => {
@@ -113,11 +97,7 @@ export default function AnimalForm() {
   const animalForCalc = withAutoStage(form);
   const rec = recommendedMeals(form);
   const meals = mealsTouched ? form.meals : rec.value;
-  const dryProduct = form.dryProductId ? findProduct(form.dryProductId, customProducts) : null;
-  const wetProduct = form.wetProductId ? findProduct(form.wetProductId, customProducts) : null;
-  const product = dryProduct || wetProduct;
   const kcal = dailyKcal(animalForCalc);
-  const plan = splitPlan({ kcal, dry: dryProduct, wet: wetProduct, wetPerDay: form.wetPerDay ?? 1, meals });
   const displayName = form.name.trim() || (isDog ? 'o teu cão' : 'o teu gato');
 
   const errors = useMemo(() => {
@@ -148,7 +128,7 @@ export default function AnimalForm() {
       stage: animalForCalc.stage,
       productId: null,
     });
-    if (onboarding) finishOnboarding('/inicio');
+    if (onboarding) finishOnboarding({ pathname: '/animal/[id]', params: { id } });
     else if (editing) router.back();
     else router.replace({ pathname: '/animal/[id]', params: { id } });
   };
@@ -161,12 +141,6 @@ export default function AnimalForm() {
 
   // Mudar entre gato e cão: o porte só existe nos cães e a fase volta a ser calculada.
   const setSpecies = (species) => onBirth({ species, size: form.size || 'medium' });
-
-  const openPicker = (slot) =>
-    router.push({
-      pathname: '/racao',
-      params: { slot, animalId: editing?.id || '', species: form.species, stage: animalForCalc.stage, conditions: (form.conditions || []).join(','), name: form.name.trim(), kcal: kcal ? String(Math.round(kcal)) : '' },
-    });
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -350,21 +324,6 @@ export default function AnimalForm() {
           </View>
         </View>
 
-        {/* Plano de alimentação: seca e/ou húmida */}
-        <SectionTitle>Alimentação (podes escolher depois)</SectionTitle>
-        <View>
-          <FeedingPlan
-            stats={plan}
-            products={{ dry: dryProduct, wet: wetProduct }}
-            wetPerDay={form.wetPerDay ?? 1}
-            meals={meals}
-            onPick={openPicker}
-            onRemove={(slot) => set(slot === 'wet' ? { wetProductId: null } : { dryProductId: null })}
-            onWetChange={(n) => set({ wetPerDay: n })}
-            showCosts={false}
-          />
-        </View>
-
         {/* Estimativa */}
         <View style={{ backgroundColor: colors.coralTint, borderRadius: 16, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <View style={{ flex: 1 }}>
@@ -379,16 +338,11 @@ export default function AnimalForm() {
               {kcal ? `${formatNumber(kcal)} kcal` : '—'}
             </Text>
             <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText }}>
-              {product ? 'por dia' : kcal ? 'escolhe a ração' : 'indica o peso'}
+              {kcal ? 'por dia' : 'indica o peso'}
             </Text>
           </View>
         </View>
-        {(plan.dry && doseLooksHigh(plan.dry.grams, form.weight, 'dry', animalForCalc.stage)) || (plan.wet && !plan.dry && doseLooksHigh(plan.wet.grams, form.weight, 'wet', animalForCalc.stage)) ? (
-          <Body size={13} style={{ color: colors.coralDark }}>
-            Este valor parece alto. Confirma o peso ({form.weight} kg) e a energia da ração ({product ? `${formatNumber(product.kcalPerKg)} kcal/kg${product.kcalEstimated ? ', estimada' : ''}` : '—'}).
-          </Body>
-        ) : null}
-        <Body muted size={12} style={{ textAlign: 'center' }}>Estimativa de referência. Confirma com o teu veterinário.</Body>
+        <Body muted size={12} style={{ textAlign: 'center' }}>{editing ? 'A ração escolhe-se na ficha, em “Alimentação”.' : 'A seguir escolhes a ração na ficha.'} Estimativa de referência; confirma com o teu veterinário.</Body>
       </Screen>
     </KeyboardAvoidingView>
   );
