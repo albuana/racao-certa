@@ -312,10 +312,12 @@ export function describeAnimal(animal) {
 }
 
 export function neuterQuestion(sex) {
+  if (!sex) return 'Esterilizado(a) / castrado?';
   return sex === 'f' ? 'Esterilizada?' : 'Castrado?';
 }
 
 export function neuterYesLabel(sex) {
+  if (!sex) return 'Sim';
   return sex === 'f' ? 'Sim, esterilizada' : 'Sim, castrado';
 }
 

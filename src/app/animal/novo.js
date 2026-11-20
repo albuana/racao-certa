@@ -14,8 +14,8 @@ import {
   Field,
   Label,
   OptionGrid,
-  Screen,
   Segmented,
+  Screen,
   StepHeader,
   BackButton,
   Title,
@@ -58,20 +58,22 @@ export default function AnimalForm() {
           weight: editing.weight != null ? String(editing.weight).replace('.', ',') : '',
         }
       : {
-          species: params.species === 'dog' || OTHER_GROUPS[params.species] ? params.species : 'cat',
-          kind: OTHER_GROUPS[params.species] ? OTHER_GROUPS[params.species].kinds[0].id : null,
+          // Ao criar, nada vem escolhido: a pessoa escolhe tudo (é ela quem sabe e responde pelos dados).
+          species: params.species === 'cat' || params.species === 'dog' || OTHER_GROUPS[params.species] ? params.species : null,
+          kind: null,
           count: 1,
           name: '',
           weight: '',
-          size: 'medium',
+          size: null,
           birthDate: null,
           conditions: [],
-          stage: 'adult',
-          sex: 'f',
-          neutered: true,
-          active: false,
+          stage: null,
+          sex: null,
+          neutered: null,
+          active: null,
+          bcs: null,
           goal: 'keep',
-          meals: 2,
+          meals: null,
           dryProductId: null,
           wetProductId: null,
           wetPerDay: 1,
@@ -79,8 +81,6 @@ export default function AnimalForm() {
         }
   );
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  // Refeições: segue a recomendação (idade, porte) até a pessoa mudar à mão.
-  const [mealsTouched, setMealsTouched] = useState(!!editing);
   // ?ver=1: a mesma ficha, só para ver (sem editar); "Editar" passa ao modo de edição.
   const [readOnly, setReadOnly] = useState(!!editing && params.ver === '1');
   const isDog = form.species === 'dog';
@@ -99,19 +99,31 @@ export default function AnimalForm() {
   const stages = stagesFor(form.species, form.size);
   const animalForCalc = withAutoStage(form);
   const rec = recommendedMeals(form);
-  const meals = mealsTouched ? form.meals : rec.value;
+  const meals = form.meals;
 
   const errors = useMemo(() => {
     const e = [];
+    if (!form.species) return ['que animal é'];
+    if (OTHER_GROUPS[form.species] && !form.kind) e.push('a espécie');
     if (!form.name.trim()) e.push('o nome');
     const w = parseNumber(form.weight);
     if ((catDog || usesWeight(form.species)) && (!w || w <= 0 || w > 120)) e.push('o peso');
+    if (catDog) {
+      if (form.species === 'dog' && !form.size) e.push('o porte');
+      if (!form.birthDate && !form.stage) e.push('a fase de vida (ou a data de nascimento)');
+      if (!form.sex) e.push('o sexo');
+      if (form.neutered == null) e.push(form.sex === 'f' ? 'se está esterilizada' : 'se está castrado');
+      if (form.active == null) e.push(form.species === 'dog' ? 'o nível de atividade' : 'o estilo de vida');
+      if (!form.bcs && !editing) e.push('como está o corpo');
+      if (!editing && !form.healthNone && !(form.conditions || []).length) e.push('os problemas de saúde (ou "Nenhum")');
+      if (!form.meals) e.push('as refeições por dia');
+    }
     return e;
-  }, [form.name, form.weight, form.species, catDog]);
+  }, [form, catDog, editing]);
 
   const save = () => {
     if (errors.length) {
-      Alert.alert('Falta preencher', `Indica ${errors.join(' e ')}.`);
+      Alert.alert('Falta escolher', `Indica ${errors.length > 1 ? `${errors.slice(0, -1).join(', ')} e ${errors[errors.length - 1]}` : errors[0]}.`);
       return;
     }
     const kgNow = parseNumber(form.weight);
@@ -145,8 +157,8 @@ export default function AnimalForm() {
   // Mudar entre gato e cão: o porte só existe nos cães e a fase volta a ser calculada.
   const setSpecies = (species) =>
     OTHER_GROUPS[species]
-      ? set({ species, kind: OTHER_GROUPS[species].kinds[0].id, count: form.count || 1, conditions: [] })
-      : onBirth({ species, size: form.size || 'medium' });
+      ? set({ species, kind: null, count: form.count || 1, conditions: [] })
+      : onBirth({ species, size: species === 'dog' ? form.size || null : form.size });
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -173,10 +185,12 @@ export default function AnimalForm() {
           {onboarding ? (
             <Body muted size={14}>Assim calculamos quanto deve comer e avisamos quando a ração está a acabar.</Body>
           ) : null}
+          {!readOnly ? <Body muted size={12}>* obrigatório</Body> : null}
         </View>
 
         <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: 16 }}>
         {/* Que animal (só ao criar): gato, cão, ave, pequeno mamífero, peixe ou réptil */}
+        {!editing ? <Label style={{ marginBottom: -8 }}>Que animal é? *</Label> : null}
         {!editing ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {[
@@ -202,10 +216,12 @@ export default function AnimalForm() {
           </View>
         ) : null}
 
+        {form.species ? (
+        <>
         {/* Outros animais: qual espécie */}
         {group ? (
           <View>
-            <Label>Que {form.species === 'fish' ? 'peixes' : 'animal'}?</Label>
+            <Label>Que {form.species === 'fish' ? 'peixes' : 'animal'}? *</Label>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {group.kinds.map((k) => (
                 <Chip key={k.id} label={k.label} active={form.kind === k.id} onPress={() => set({ kind: k.id })} />
@@ -240,14 +256,14 @@ export default function AnimalForm() {
 
         <SectionTitle>{catDog || usesWeight(form.species) ? 'Nome e peso' : 'Nome'}</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Field style={{ flex: 2 }} label="Nome" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : group ? (form.species === 'fish' ? 'Aquário da sala' : 'Kiwi') : 'Luna'} maxLength={30} />
+          <Field style={{ flex: 2 }} label="Nome *" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : group ? (form.species === 'fish' ? 'Aquário da sala' : 'Kiwi') : 'Luna'} maxLength={30} />
           {catDog || usesWeight(form.species) ? (
-            <Field style={{ flex: 1 }} label="Peso (kg)" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder={group ? '1,8' : '4,2'} keyboardType="decimal-pad" />
+            <Field style={{ flex: 1 }} label="Peso (kg) *" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder={group ? '1,8' : '4,2'} keyboardType="decimal-pad" />
           ) : null}
         </View>
         {usesCount(form.species) ? (
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, paddingVertical: 6, paddingRight: 6, paddingLeft: 14 }}>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>{form.species === 'fish' ? 'Quantos peixes?' : 'Quantas aves?'}</Text>
+            <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>{form.species === 'fish' ? 'Quantos peixes? *' : 'Quantas aves? *'}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <StepperButton icon="remove" label="Menos um" onPress={() => set({ count: Math.max(1, (form.count || 1) - 1) })} />
               <Text style={{ width: 32, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>{form.count || 1}</Text>
@@ -258,7 +274,7 @@ export default function AnimalForm() {
 
         {isDog ? (
           <OptionGrid
-            label="Porte"
+            label="Porte *"
             value={form.size}
             onChange={(size) => onBirth({ size })}
             options={DOG_SIZES.map((s) => ({ value: s.id, label: s.label, hint: s.hint }))}
@@ -276,7 +292,7 @@ export default function AnimalForm() {
           />
           <View style={{ height: 14 }} />
           <OptionGrid
-            label={form.birthDate ? 'Fase de vida (pela data de nascimento)' : 'Fase de vida'}
+            label={form.birthDate ? 'Fase de vida (pela data de nascimento)' : 'Fase de vida *'}
             disabled={!!form.birthDate}
             value={animalForCalc.stage}
             onChange={(stage) => set({ stage })}
@@ -286,7 +302,7 @@ export default function AnimalForm() {
 
         <SectionTitle>Dia a dia</SectionTitle>
         <Segmented
-          label="Sexo"
+          label="Sexo *"
           value={form.sex}
           onChange={(sex) => set({ sex })}
           options={[
@@ -295,7 +311,7 @@ export default function AnimalForm() {
           ]}
         />
         <Segmented
-          label={neuterQuestion(form.sex)}
+          label={`${neuterQuestion(form.sex)} *`}
           value={form.neutered}
           onChange={(neutered) => set({ neutered })}
           options={[
@@ -304,17 +320,17 @@ export default function AnimalForm() {
           ]}
         />
         <Segmented
-          label={isDog ? 'Nível de atividade' : 'Estilo de vida'}
+          label={isDog ? 'Nível de atividade *' : 'Estilo de vida *'}
           value={form.active}
           onChange={(active) => set({ active })}
           options={isDog ? [{ value: false, label: 'Calmo' }, { value: true, label: 'Muito ativo' }] : [{ value: false, label: 'Interior' }, { value: true, label: 'Vai à rua' }]}
         />
         {/* Condição corporal: é assim que o veterinário ajusta a dose */}
         <BodyConditionPicker
-          label={`Como está o corpo ${female ? 'dela' : 'dele'}?`}
+          label={`Como está o corpo ${female ? 'dela' : 'dele'}? *`}
           species={form.species}
           female={female}
-          value={bodyCondition(form)}
+          value={editing ? bodyCondition(form) : form.bcs}
           onChange={(bcs) => set({ bcs, goal: bcs === 'over' ? 'lose' : 'keep' })}
         />
         {bodyCondition(form) === 'over' && animalForCalc.stage === 'junior' ? (
@@ -324,8 +340,9 @@ export default function AnimalForm() {
         {/* Problemas de saúde */}
         <SectionTitle>Saúde</SectionTitle>
         <View>
-          <Label>Problemas de saúde (opcional)</Label>
+          <Label>Problemas de saúde *</Label>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <Chip label="Nenhum" active={form.healthNone === true && !(form.conditions || []).length} onPress={() => set({ healthNone: true, conditions: [] })} />
             {HEALTH_CONDITIONS.map((c) => {
               const on = (form.conditions || []).includes(c.id);
               return (
@@ -333,7 +350,7 @@ export default function AnimalForm() {
                   key={c.id}
                   label={c.label}
                   active={on}
-                  onPress={() => set({ conditions: on ? form.conditions.filter((x) => x !== c.id) : [...(form.conditions || []), c.id] })}
+                  onPress={() => set({ healthNone: false, conditions: on ? form.conditions.filter((x) => x !== c.id) : [...(form.conditions || []), c.id] })}
                 />
               );
             })}
@@ -345,11 +362,11 @@ export default function AnimalForm() {
 
         {/* Refeições por dia (recomendação ao lado, como curiosidade) */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, paddingVertical: 6, paddingRight: 6, paddingLeft: 14 }}>
-          <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>Refeições por dia</Text>
+          <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>Refeições por dia *</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <StepperButton icon="remove" label="Menos uma refeição" onPress={() => { setMealsTouched(true); set({ meals: Math.max(1, meals - 1) }); }} />
-            <Text style={{ width: 28, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>{meals}</Text>
-            <StepperButton icon="add" label="Mais uma refeição" onPress={() => { setMealsTouched(true); set({ meals: Math.min(6, meals + 1) }); }} />
+            <StepperButton icon="remove" label="Menos uma refeição" onPress={() => set({ meals: meals ? Math.max(1, meals - 1) : Math.max(1, rec.value - 1) })} />
+            <Text style={{ width: 28, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: meals ? colors.text : colors.textMuted }}>{meals || '—'}</Text>
+            <StepperButton icon="add" label="Mais uma refeição" onPress={() => set({ meals: meals ? Math.min(6, meals + 1) : rec.value })} />
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: 8, backgroundColor: colors.coralTint, borderRadius: 12, padding: 12, marginTop: -6 }}>
@@ -358,7 +375,7 @@ export default function AnimalForm() {
             <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.coralTintText }}>
               {rec.reason}
             </Text>
-            {meals < rec.min || meals > rec.max ? (
+            {meals && (meals < rec.min || meals > rec.max) ? (
               <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.coralTintText }}>
                 Escolheste {meals}. A quantidade do dia é a mesma; só muda a forma como se divide.
               </Text>
@@ -368,6 +385,10 @@ export default function AnimalForm() {
 
         </>
         ) : null}
+        </>
+        ) : (
+          <Body muted>Escolhe primeiro que animal é.</Body>
+        )}
         </View>
       </Screen>
     </KeyboardAvoidingView>

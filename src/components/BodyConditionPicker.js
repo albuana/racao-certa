@@ -83,7 +83,7 @@ export function BodyShape({ species = 'cat', condition = 'ideal', size = 84, act
 }
 
 export default function BodyConditionPicker({ species, female, value, onChange, label }) {
-  const selected = BODY_CONDITIONS.find((b) => b.id === value) || BODY_CONDITIONS[1];
+  const selected = BODY_CONDITIONS.find((b) => b.id === value) || null;
   return (
     <View style={{ gap: 8 }}>
       {label ? <Label>{label}</Label> : null}
@@ -117,7 +117,7 @@ export default function BodyConditionPicker({ species, female, value, onChange, 
           );
         })}
       </View>
-      <Body muted size={12}>{selected.hint}</Body>
+      <Body muted size={12}>{selected ? selected.hint : 'Escolhe a que se parece mais. Na dúvida, apalpa as costelas e vê a cintura de cima.'}</Body>
     </View>
   );
 }
