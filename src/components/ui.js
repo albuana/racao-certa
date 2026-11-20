@@ -132,7 +132,9 @@ export function Segmented({ options, value, onChange, label }) {
 }
 
 // Grelha de opções com título e subtítulo (ex.: fases de vida).
-export function OptionGrid({ options, value, onChange, label, columns = 2, disabled }) {
+export function OptionGrid({ options, value, onChange, label, columns = 2, disabled, fadedWhenEmpty = false }) {
+  // fadedWhenEmpty: sem nada escolhido, as opções aparecem mais clarinhas; depois de escolher, normais.
+  const empty = fadedWhenEmpty && (value === null || value === undefined);
   return (
     <View>
       {label ? <Label>{label}</Label> : null}
@@ -146,7 +148,7 @@ export function OptionGrid({ options, value, onChange, label, columns = 2, disab
               disabled={disabled}
               accessibilityRole="radio"
               accessibilityState={{ selected: on, disabled: !!disabled }}
-              style={[styles.option, { width: columns === 2 ? '48.5%' : '100%' }, on && styles.optionOn, disabled && !on && { opacity: 0.45 }]}
+              style={[styles.option, { width: columns === 2 ? '48.5%' : '100%' }, on && styles.optionOn, (disabled && !on) || empty ? { opacity: 0.45 } : null]}
             >
               <Text style={[styles.optionTitle, on && { color: colors.navy }]}>{o.label}</Text>
               {o.hint ? <Text style={[styles.optionHint, on && { color: colors.coralTintText }]}>{o.hint}</Text> : null}

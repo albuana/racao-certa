@@ -168,7 +168,9 @@ export default function AnimalForm() {
             <Button icon="create-outline" title={`Editar ficha`} onPress={() => setReadOnly(false)} />
           ) : (
           <View style={{ gap: 4 }}>
-            <Button title={editing ? 'Guardar' : `Criar ${form.name.trim() || (isDog ? 'cão' : 'gato')}`} onPress={save} />
+            {form.species ? (
+              <Button title={editing ? 'Guardar' : form.name.trim() ? `Criar ${form.name.trim()}` : 'Criar animal'} onPress={save} />
+            ) : null}
             {onboarding ? <Button variant="ghost" title="Saltar por agora" onPress={() => finishOnboarding('/procurar')} /> : null}
           </View>
           )
@@ -185,12 +187,10 @@ export default function AnimalForm() {
           {onboarding ? (
             <Body muted size={14}>Assim calculamos quanto deve comer e avisamos quando a ração está a acabar.</Body>
           ) : null}
-          {!readOnly ? <Body muted size={12}>* obrigatório</Body> : null}
         </View>
 
         <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: 16 }}>
         {/* Que animal (só ao criar): gato, cão, ave, pequeno mamífero, peixe ou réptil */}
-        {!editing ? <Label style={{ marginBottom: -8 }}>Que animal é? *</Label> : null}
         {!editing ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {[
@@ -206,10 +206,14 @@ export default function AnimalForm() {
                   accessibilityRole="radio"
                   accessibilityState={{ selected: on }}
                   accessibilityLabel={o.label}
-                  style={{ width: '31.5%', minHeight: 76, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 4, backgroundColor: on ? colors.coralTint : colors.card, borderWidth: on ? 2 : 1, borderColor: on ? colors.navy : colors.borderStrong }}
+                  // Como as barras de opções: por escolher no fundo rosado; a escolhida fica branca e em negrito.
+                  style={[
+                    { width: '31.5%', minHeight: 76, borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 4, backgroundColor: colors.segmentBg },
+                    on && { backgroundColor: colors.card, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+                  ]}
                 >
-                  <MaterialCommunityIcons name={o.icon} size={28} color={on ? colors.navy : colors.text} />
-                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, textAlign: 'center', color: on ? colors.navy : colors.text }}>{o.label}</Text>
+                  <MaterialCommunityIcons name={o.icon} size={28} color={on ? colors.text : colors.textMuted} />
+                  <Text style={{ fontFamily: on ? fonts.semibold : fonts.regular, fontSize: 13, textAlign: 'center', color: on ? colors.text : colors.textMuted }}>{o.label}</Text>
                 </Pressable>
               );
             })}
@@ -292,6 +296,7 @@ export default function AnimalForm() {
           />
           <View style={{ height: 14 }} />
           <OptionGrid
+            fadedWhenEmpty
             label={form.birthDate ? 'Fase de vida (pela data de nascimento)' : 'Fase de vida *'}
             disabled={!!form.birthDate}
             value={animalForCalc.stage}
@@ -387,7 +392,7 @@ export default function AnimalForm() {
         ) : null}
         </>
         ) : (
-          <Body muted>Escolhe primeiro que animal é.</Body>
+          <Body muted>Escolha o animal que pretende criar</Body>
         )}
         </View>
       </Screen>
