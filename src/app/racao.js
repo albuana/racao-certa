@@ -12,13 +12,19 @@ import { inferConditions, inferStagesFor, lookupBarcode, priceSearchUrl, searchP
 import { HEALTH_CONDITIONS, cheapestOffer, formatEuro, formatNumber, parseNumber, stagesFor } from '../lib/nutrition';
 import { fetchSuggestions } from '../lib/prices';
 import { planIds } from '../lib/household';
+import { FOOD_SEARCHES, OTHER_GROUPS } from '../lib/otherAnimals';
 import { groupResults, sameProduct, searchStores } from '../lib/search';
 import { useStore } from '../store/AppStore';
 import { colors, fonts } from '../theme';
 
 export default function RacaoPicker() {
   const params = useLocalSearchParams();
-  const species = params.species === 'dog' ? 'dog' : 'cat';
+  const species = params.species === 'dog' || OTHER_GROUPS[params.species] ? params.species : 'cat';
+  // Aves, pequenos mamíferos, peixes e répteis: pesquisas próprias de cada espécie (sementes, feno, flocos…).
+  const otherGroup = OTHER_GROUPS[species] || null;
+  const kindId = otherGroup ? params.kind || otherGroup.kinds[0].id : null;
+  const foodSearches = kindId ? FOOD_SEARCHES[kindId] || [] : [];
+  const [foodCat, setFoodCat] = useState(0);
   const stage = params.stage || null;
   const kcal = parseNumber(params.kcal);
   const animalId = params.animalId || null;
@@ -41,11 +47,13 @@ export default function RacaoPicker() {
   const [draft, setDraft] = useState(null); // ração a adicionar à mão (último recurso)
 
   // Opções com preço em todas as lojas: pesquisa livre (todas as lojas da web) ou sugestões para este animal.
-  const key = `${submitted}|${species}|${type}|${onlyStage ? stage || '' : ''}|${animalConditions.join(',')}`;
+  const key = `${submitted}|${species}|${kindId || ''}|${foodCat}|${type}|${onlyStage ? stage || '' : ''}|${animalConditions.join(',')}`;
   useEffect(() => {
     let alive = true;
     const load = submitted
-      ? searchStores(submitted, { species, type })
+      ? searchStores(submitted, otherGroup ? {} : { species, type })
+      : otherGroup
+      ? searchStores(foodSearches[foodCat]?.q || otherGroup.kinds[0].label)
       : fetchSuggestions({ species, type, stage: onlyStage ? stage : '', conditions: animalConditions }).then(groupResults);
     load
       .then((groups) => alive && setResults({ key, groups, error: false }))
@@ -74,7 +82,7 @@ export default function RacaoPicker() {
 
   // Custo por dia para este animal: energia típica da ração → gramas por dia → €/kg.
   const options = (results.key === key ? results.groups : [])
-    .filter((g) => !type || g.type === type)
+    .filter((g) => otherGroup || !type || g.type === type)
     // Sem problemas de saúde na ficha: nada de dietas veterinárias (a não ser que se procure pelo nome).
     .filter((g) => animalConditions.length || submitted || !inferConditions(g.name).length)
     // Um cartão por loja: a mesma ração em duas lojas são dois cartões.
@@ -212,7 +220,7 @@ export default function RacaoPicker() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <BackButton />
-        <Title size={24} style={{ flex: 1 }}>{params.name ? `Ração para ${params.name}` : 'Escolher ração'}</Title>
+        <Title size={24} style={{ flex: 1 }}>{params.name ? `${otherGroup ? 'Comida' : 'Ração'} para ${params.name}` : otherGroup ? 'Escolher comida' : 'Escolher ração'}</Title>
       </View>
 
       {looking ? (
@@ -271,11 +279,19 @@ export default function RacaoPicker() {
         </Pressable>
       </View>
 
+      {otherGroup ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {foodSearches.map((f, i) => (
+            <Chip key={f.q} label={f.label} active={!submitted && foodCat === i} onPress={() => { setSubmitted(''); setQuery(''); setFoodCat(i); }} />
+          ))}
+        </View>
+      ) : (
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {stageLabel ? <Chip label={stageLabel} active={onlyStage} onPress={() => setOnlyStage((v) => !v)} /> : null}
         <Chip label="Seca" active={type === 'dry'} onPress={() => setType('dry')} />
         <Chip label="Húmida" active={type === 'wet'} onPress={() => setType('wet')} />
       </View>
+      )}
       {condLabel ? <Body muted size={12}>Só rações para problema {condLabel}, como está na ficha de {who}.</Body> : null}
 
       {/* Já experimentou (fechado; abre-se para ver) */}
@@ -312,7 +328,7 @@ export default function RacaoPicker() {
         <Text style={{ fontFamily: fonts.displaySemi, fontSize: 19, color: colors.text }}>
           {submitted ? `Resultados para “${submitted}”` : `Opções para ${who}`}
         </Text>
-        <Body muted size={13}>Da mais barata por dia para {who}, em todas as lojas. Toca para escolher; o ícone abre a loja.</Body>
+        <Body muted size={13}>{otherGroup ? 'Da mais barata por kg, em todas as lojas.' : `Da mais barata por dia para ${who}, em todas as lojas.`}</Body>
       </View>
 
       {!loading && sizes.length > 1 ? (
@@ -390,19 +406,32 @@ function OptionCard({ group, cheapest, disliked, onPress }) {
             {o.portes ? ` · ${o.portes}` : ''}
           </Text>
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.coralDark }}>
-              {group.perDay != null ? formatEuro(group.perDay) : group.perKg ? formatEuro(group.perKg) : '—'}
-            </Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted }}>{group.perDay != null ? 'por dia' : 'por kg'}</Text>
-          </View>
-          {o.link ? (
-            <Pressable onPress={() => Linking.openURL(o.link).catch(() => {})} hitSlop={10} accessibilityRole="link" accessibilityLabel={`Abrir na ${o.store}`}>
-              <Ionicons name="open-outline" size={18} color={colors.navy} />
-            </Pressable>
-          ) : null}
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.coralDark }}>
+            {group.perDay != null ? formatEuro(group.perDay) : group.perKg ? formatEuro(group.perKg) : '—'}
+          </Text>
+          <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted }}>{group.perDay != null ? 'por dia' : 'por kg'}</Text>
         </View>
+      </View>
+      {/* Ver na loja · Escolher */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+        {o.link ? (
+          <Pressable onPress={() => Linking.openURL(o.link).catch(() => {})} hitSlop={8} accessibilityRole="link" accessibilityLabel={`Ver na ${o.store}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36 }}>
+            <Ionicons name="open-outline" size={15} color={colors.navy} />
+            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.navy }}>Ver na loja</Text>
+          </Pressable>
+        ) : (
+          <View />
+        )}
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Escolher ${group.name}`}
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, minHeight: 38, borderRadius: 19, backgroundColor: pressed ? colors.navyDark : colors.navy })}
+        >
+          <Ionicons name="checkmark" size={16} color={colors.white} />
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.white }}>Escolher</Text>
+        </Pressable>
       </View>
     </Pressable>
   );

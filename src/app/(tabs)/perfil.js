@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image, Pressable, Text, View } from 'react-native';
 import { LogoIcon } from '../../components/Logo';
 import { Body, Button, Card, Field, Label, Screen, Title } from '../../components/ui';
 import { authMessage } from '../../lib/auth';
-import { authEnabled } from '../../lib/supabase';
+import { choosePhoto } from '../../lib/photos';
+import { authEnabled, supabase } from '../../lib/supabase';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
 
@@ -22,7 +23,20 @@ function syncText(sync) {
 }
 
 export default function Perfil() {
-  const { account, house, setHouseName, animals, resetAll, signOut, deleteAccount, sync } = useStore();
+  const { account, house, setHouseName, animals, resetAll, signOut, deleteAccount, sync, updateAccount } = useStore();
+
+  // Contas antigas: vai buscar o nome e a foto (Google) que ainda não estavam guardados.
+  useEffect(() => {
+    if (!supabase || !account?.userId || account.avatarUrl !== undefined) return;
+    supabase.auth.getUser().then(({ data }) => {
+      const meta = data?.user?.user_metadata || {};
+      updateAccount({ avatarUrl: meta.avatar_url || meta.picture || null, name: account.name || meta.full_name || meta.name || null });
+    });
+  }, [account?.userId, account?.avatarUrl, account?.name, updateAccount]);
+
+  const photo = account?.photoUri || account?.avatarUrl || null;
+  const changePhoto = () =>
+    choosePhoto((uri) => updateAccount({ photoUri: uri }), account?.photoUri ? () => updateAccount({ photoUri: null }) : undefined);
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const signedIn = Boolean(account?.userId);
@@ -87,18 +101,29 @@ export default function Perfil() {
       <Title size={30}>Perfil</Title>
 
       {signedIn ? (
-        <Card style={{ gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Ionicons
-              name={account.mode === 'apple' ? 'logo-apple' : account.mode === 'google' ? 'logo-google' : 'mail-outline'}
-              size={20}
-              color={colors.navy}
-            />
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>
-              {PROVIDER[account.mode] || 'Conta'}
-            </Text>
+        <Card style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Mudar a tua foto">
+              {photo ? (
+                <Image source={{ uri: photo }} style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.coralTint }} accessibilityIgnoresInvertColors />
+              ) : (
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.coralTint, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="person" size={30} color={colors.coralDark} />
+                </View>
+              )}
+              <View style={{ position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.card, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="camera-outline" size={13} color={colors.white} />
+              </View>
+            </Pressable>
+            <View style={{ flex: 1, gap: 2 }}>
+              {account.name ? <Text style={{ fontFamily: fonts.semibold, fontSize: 17, color: colors.text }}>{account.name}</Text> : null}
+              {account.email ? <Body size={14}>{account.email}</Body> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name={account.mode === 'apple' ? 'logo-apple' : account.mode === 'google' ? 'logo-google' : 'mail-outline'} size={14} color={colors.textMuted} />
+                <Body muted size={13}>{PROVIDER[account.mode] || 'Conta'}</Body>
+              </View>
+            </View>
           </View>
-          {account.email ? <Body size={14}>{account.email}</Body> : null}
           <Body muted size={13}>{syncText(sync)}</Body>
         </Card>
       ) : (

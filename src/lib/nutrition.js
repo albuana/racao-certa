@@ -7,10 +7,21 @@
 //
 // São estimativas de referência. Não substituem o veterinário.
 
+import { OTHER_GROUPS } from './otherAnimals.js';
+
 export const SPECIES = {
   cat: { id: 'cat', label: 'Gato', plural: 'Gatos' },
   dog: { id: 'dog', label: 'Cão', plural: 'Cães' },
 };
+
+// "Gata", "Gato", "Cadela", "Cão" (conforme a espécie e o sexo).
+export function speciesWord(animal) {
+  const other = OTHER_GROUPS[animal?.species];
+  if (other) return (other.kinds.find((k) => k.id === animal.kind) || other.kinds[0]).label;
+  const f = animal?.sex === 'f';
+  if (animal?.species === 'dog') return f ? 'Cadela' : 'Cão';
+  return f ? 'Gata' : 'Gato';
+}
 
 // Problemas de saúde com rações próprias (dietas veterinárias).
 // As palavras servem para reconhecer estas rações pelo nome (PT, EN, ES, FR).
@@ -240,6 +251,8 @@ function energyFactorBase(animal) {
 }
 
 export function dailyKcal(animal) {
+  // A fórmula de energia é só para cães e gatos; os outros animais seguem a recomendação da espécie.
+  if (animal.species && animal.species !== 'cat' && animal.species !== 'dog') return null;
   const w = parseNumber(animal.weight);
   if (!w || w <= 0) return null;
   return restingEnergy(w) * energyFactor(animal);
@@ -276,6 +289,12 @@ export function bagDaysLeft(bag, grams, now = new Date()) {
 
 // Texto curto que descreve o animal, com concordância de género.
 export function describeAnimal(animal) {
+  if (OTHER_GROUPS[animal?.species]) {
+    const n = Number(animal.count) || 1;
+    if (animal.species === 'bird') return n > 1 ? `${n} aves` : '';
+    if (animal.species === 'fish') return `${n} ${n === 1 ? 'peixe' : 'peixes'}`;
+    return '';
+  }
   const female = animal.sex === 'f';
   const words = {
     junior: ['júnior', 'júnior'],

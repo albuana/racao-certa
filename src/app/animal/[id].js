@@ -6,7 +6,8 @@ import FeedingPlan from '../../components/FeedingPlan';
 import WeighCard from '../../components/WeighCard';
 import { Avatar, BackButton, Body, Button, Card, Screen, Title } from '../../components/ui';
 import { animalStats, planIds } from '../../lib/household';
-import { ageText, conditionLabel, doseLooksHigh, formatEuro, formatNumber, neuterYesLabel, stageLabel, withAutoStage } from '../../lib/nutrition';
+import { feedingGuide, isOther } from '../../lib/otherAnimals';
+import { ageText, conditionLabel, describeAnimal, doseLooksHigh, speciesWord, formatEuro, formatNumber, neuterYesLabel, stageLabel, withAutoStage } from '../../lib/nutrition';
 import { fitIssues } from '../../lib/fit';
 import { findProduct } from '../../data/products';
 import { fetchLivePrices, livePricesEnabled, pricesAreStale } from '../../lib/prices';
@@ -67,14 +68,15 @@ export default function AnimalDetail() {
   const openPicker = (slot) =>
     router.push({
       pathname: '/racao',
-      params: { slot: slot || (dryP ? 'wet' : 'dry'), animalId: animal.id, species: animal.species, stage: animal.stage, conditions: (animal.conditions || []).join(','), name: animal.name, kcal: s.kcal ? String(Math.round(s.kcal)) : '' },
+      params: { slot: slot || (dryP ? 'wet' : 'dry'), animalId: animal.id, kind: animal.kind || '', species: animal.species, stage: animal.stage, conditions: (animal.conditions || []).join(','), name: animal.name, kcal: s.kcal ? String(Math.round(s.kcal)) : '' },
     });
-  const female = animal.sex === 'f';
-  const chips = [
+  const other = isOther(animal);
+  const guide = other ? feedingGuide(animal) : null;
+  const chips = other ? [speciesWord(animal), animal.weight ? `${formatNumber(animal.weight, 1)} kg` : null, describeAnimal(animal)].filter(Boolean) : [
     `${formatNumber(animal.weight, 1)} kg`,
     animal.birthDate ? ageText(animal.ageMonths) : null,
     stageLabel(animal),
-    female ? 'Fêmea' : 'Macho',
+    speciesWord(animal),
     animal.neutered ? neuterYesLabel(animal.sex).replace('Sim, ', '').replace(/^./, (c) => c.toUpperCase()) : null,
     animal.species === 'dog' ? (animal.active ? 'Muito ativo' : 'Calmo') : animal.active ? 'Vai à rua' : 'Interior',
     animal.goal === 'lose' && animal.stage !== 'junior' ? 'Em dieta' : null,
@@ -137,6 +139,18 @@ export default function AnimalDetail() {
         </View>
       </View>
 
+      {other ? (
+        /* Outros animais: recomendação da espécie (não há fórmula de energia como nos cães e gatos) */
+        <Card style={{ padding: 18, borderRadius: 20, gap: 8 }}>
+          <Body muted size={13}>Quanto dar</Body>
+          <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.coralDark }}>{guide?.headline}</Text>
+          {(guide?.lines || []).map((l) => (
+            <Text key={l} style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.text, lineHeight: 20 }}>• {l}</Text>
+          ))}
+          <Body muted size={12}>Recomendação geral para a espécie. Confirma com um veterinário de exóticos.</Body>
+        </Card>
+      ) : (
+      <>
       {/* Resumo do dia: calorias e custo do plano completo */}
       <Card style={{ padding: 18, borderRadius: 20, gap: 8 }}>
         <Body muted size={13}>Energia por dia</Body>
@@ -179,6 +193,9 @@ export default function AnimalDetail() {
         }}
       />
 
+      </>
+      )}
+
       {issueList.map(({ product, issues }) => (
         <View key={product.id} style={{ backgroundColor: colors.alertBg, borderColor: colors.alertBorder, borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -200,6 +217,7 @@ export default function AnimalDetail() {
         products={{ dry: dryP, wet: wetP }}
         wetPerDay={stored.wetPerDay ?? 1}
         meals={s.meals}
+        slotTitles={other ? { dry: 'Comida', wet: null } : undefined}
         onPick={openPicker}
         onEditKcal={(p, kcalPerKg) => updateProduct(p.id, { kcalPerKg, kcalEstimated: false, tags: (p.tags || []).filter((t) => t !== 'Energia estimada') })}
         onRemove={removeSlot}

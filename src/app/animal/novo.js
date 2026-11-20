@@ -22,13 +22,13 @@ import {
 } from '../../components/ui';
 import BirthDateField from '../../components/BirthDateField';
 import BodyConditionPicker from '../../components/BodyConditionPicker';
+import { OTHER_GROUPS, usesCount, usesWeight } from '../../lib/otherAnimals';
 import { planIds } from '../../lib/household';
 import { choosePhoto } from '../../lib/photos';
 import {
   DOG_SIZES,
   bodyCondition,
   HEALTH_CONDITIONS,
-  SPECIES,
   neuterQuestion,
   neuterYesLabel,
   parseNumber,
@@ -58,7 +58,9 @@ export default function AnimalForm() {
           weight: editing.weight != null ? String(editing.weight).replace('.', ',') : '',
         }
       : {
-          species: params.species === 'dog' ? 'dog' : 'cat',
+          species: params.species === 'dog' || OTHER_GROUPS[params.species] ? params.species : 'cat',
+          kind: OTHER_GROUPS[params.species] ? OTHER_GROUPS[params.species].kinds[0].id : null,
+          count: 1,
           name: '',
           weight: '',
           size: 'medium',
@@ -82,6 +84,8 @@ export default function AnimalForm() {
   // ?ver=1: a mesma ficha, só para ver (sem editar); "Editar" passa ao modo de edição.
   const [readOnly, setReadOnly] = useState(!!editing && params.ver === '1');
   const isDog = form.species === 'dog';
+  const catDog = form.species === 'cat' || form.species === 'dog';
+  const group = OTHER_GROUPS[form.species] || null;
   const female = form.sex === 'f';
 
   // A idade (se for dada) escolhe a fase de vida automaticamente.
@@ -101,9 +105,9 @@ export default function AnimalForm() {
     const e = [];
     if (!form.name.trim()) e.push('o nome');
     const w = parseNumber(form.weight);
-    if (!w || w <= 0 || w > 120) e.push('o peso');
+    if ((catDog || usesWeight(form.species)) && (!w || w <= 0 || w > 120)) e.push('o peso');
     return e;
-  }, [form.name, form.weight]);
+  }, [form.name, form.weight, form.species, catDog]);
 
   const save = () => {
     if (errors.length) {
@@ -112,7 +116,7 @@ export default function AnimalForm() {
     }
     const kgNow = parseNumber(form.weight);
     const prevKg = editing ? parseNumber(editing.weight) : null;
-    const weighIns = !editing || Math.abs(kgNow - prevKg) >= 0.01
+    const weighIns = catDog && (!editing || Math.abs(kgNow - prevKg) >= 0.01)
       ? [...(form.weighIns || []), { at: new Date().toISOString(), kg: kgNow, bcs: bodyCondition(form) }].slice(-60)
       : form.weighIns || [];
     const id = saveAnimal({
@@ -137,7 +141,10 @@ export default function AnimalForm() {
   };
 
   // Mudar entre gato e cão: o porte só existe nos cães e a fase volta a ser calculada.
-  const setSpecies = (species) => onBirth({ species, size: form.size || 'medium' });
+  const setSpecies = (species) =>
+    OTHER_GROUPS[species]
+      ? set({ species, kind: OTHER_GROUPS[species].kinds[0].id, count: form.count || 1, conditions: [] })
+      : onBirth({ species, size: form.size || 'medium' });
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -167,12 +174,13 @@ export default function AnimalForm() {
         </View>
 
         <View pointerEvents={readOnly ? 'none' : 'auto'} style={{ gap: 16 }}>
-        {/* Gato ou cão (só ao criar) */}
+        {/* Que animal (só ao criar): gato, cão, ave, pequeno mamífero, peixe ou réptil */}
         {!editing ? (
-          <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {[
-              { id: 'cat', icon: 'cat' },
-              { id: 'dog', icon: 'dog' },
+              { id: 'cat', icon: 'cat', label: 'Gato' },
+              { id: 'dog', icon: 'dog', label: 'Cão' },
+              ...Object.entries(OTHER_GROUPS).map(([id, g]) => ({ id, icon: g.icon, label: g.label })),
             ].map((o) => {
               const on = form.species === o.id;
               return (
@@ -181,14 +189,26 @@ export default function AnimalForm() {
                   onPress={() => setSpecies(o.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: on }}
-                  accessibilityLabel={SPECIES[o.id].label}
-                  style={{ flex: 1, minHeight: 64, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: on ? colors.coralTint : colors.card, borderWidth: on ? 2 : 1, borderColor: on ? colors.navy : colors.borderStrong }}
+                  accessibilityLabel={o.label}
+                  style={{ width: '31.5%', minHeight: 76, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 4, backgroundColor: on ? colors.coralTint : colors.card, borderWidth: on ? 2 : 1, borderColor: on ? colors.navy : colors.borderStrong }}
                 >
-                  <MaterialCommunityIcons name={o.icon} size={30} color={on ? colors.navy : colors.text} />
-                  <Text style={{ fontFamily: fonts.display, fontSize: 18, color: on ? colors.navy : colors.text }}>{SPECIES[o.id].label}</Text>
+                  <MaterialCommunityIcons name={o.icon} size={28} color={on ? colors.navy : colors.text} />
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13, textAlign: 'center', color: on ? colors.navy : colors.text }}>{o.label}</Text>
                 </Pressable>
               );
             })}
+          </View>
+        ) : null}
+
+        {/* Outros animais: qual espécie */}
+        {group ? (
+          <View>
+            <Label>Que {form.species === 'fish' ? 'peixes' : 'animal'}?</Label>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {group.kinds.map((k) => (
+                <Chip key={k.id} label={k.label} active={form.kind === k.id} onPress={() => set({ kind: k.id })} />
+              ))}
+            </View>
           </View>
         ) : null}
 
@@ -216,11 +236,23 @@ export default function AnimalForm() {
           </Pressable>
         )}
 
-        <SectionTitle>Nome e peso</SectionTitle>
+        <SectionTitle>{catDog || usesWeight(form.species) ? 'Nome e peso' : 'Nome'}</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Field style={{ flex: 2 }} label="Nome" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : 'Luna'} maxLength={30} />
-          <Field style={{ flex: 1 }} label="Peso (kg)" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder="4,2" keyboardType="decimal-pad" />
+          <Field style={{ flex: 2 }} label="Nome" value={form.name} onChangeText={(name) => set({ name })} placeholder={isDog ? 'Bobi' : group ? (form.species === 'fish' ? 'Aquário da sala' : 'Kiwi') : 'Luna'} maxLength={30} />
+          {catDog || usesWeight(form.species) ? (
+            <Field style={{ flex: 1 }} label="Peso (kg)" value={form.weight} onChangeText={(weight) => set({ weight })} placeholder={group ? '1,8' : '4,2'} keyboardType="decimal-pad" />
+          ) : null}
         </View>
+        {usesCount(form.species) ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12, paddingVertical: 6, paddingRight: 6, paddingLeft: 14 }}>
+            <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.text }}>{form.species === 'fish' ? 'Quantos peixes?' : 'Quantas aves?'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <StepperButton icon="remove" label="Menos um" onPress={() => set({ count: Math.max(1, (form.count || 1) - 1) })} />
+              <Text style={{ width: 32, textAlign: 'center', fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>{form.count || 1}</Text>
+              <StepperButton icon="add" label="Mais um" onPress={() => set({ count: Math.min(99, (form.count || 1) + 1) })} />
+            </View>
+          </View>
+        ) : null}
 
         {isDog ? (
           <OptionGrid
@@ -231,6 +263,8 @@ export default function AnimalForm() {
           />
         ) : null}
 
+        {catDog ? (
+        <>
         <SectionTitle>Idade</SectionTitle>
         <View>
           <BirthDateField
@@ -330,6 +364,8 @@ export default function AnimalForm() {
           </View>
         </View>
 
+        </>
+        ) : null}
         </View>
       </Screen>
     </KeyboardAvoidingView>

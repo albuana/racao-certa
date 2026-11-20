@@ -86,11 +86,13 @@ function Round({ icon, label, onPress }) {
 }
 
 // stats: resultado de animalStats/splitPlan; products: { dry, wet } (rações escolhidas)
-export default function FeedingPlan({ stats, products, wetPerDay, meals, onPick, onRemove, onWetChange, onCompare, onEditKcal, showCosts = true }) {
+export default function FeedingPlan({ stats, products, wetPerDay, meals, onPick, onRemove, onWetChange, onCompare, onEditKcal, slotTitles, showCosts = true }) {
+  // slotTitles: outros nomes (ex.: só "Comida" para aves e peixes); um título null esconde esse espaço.
+  const titles = slotTitles || { dry: 'Ração seca', wet: 'Comida húmida' };
   const slots = [
-    { slot: 'dry', title: 'Ração seca', product: products.dry, part: stats?.dry },
-    { slot: 'wet', title: 'Comida húmida', product: products.wet, part: stats?.wet },
-  ];
+    { slot: 'dry', title: titles.dry, product: products.dry, part: stats?.dry },
+    { slot: 'wet', title: titles.wet, product: products.wet, part: stats?.wet },
+  ].filter((x) => x.title);
   const both = !!(products.dry && products.wet);
 
   return (
@@ -112,7 +114,7 @@ export default function FeedingPlan({ stats, products, wetPerDay, meals, onPick,
                 <Thumb product={product} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.text }} numberOfLines={2}>{product.name}</Text>
-                  <EnergyLine product={product} onEditKcal={onEditKcal} />
+                  {slotTitles ? null : <EnergyLine product={product} onEditKcal={onEditKcal} />}
                 </View>
                 <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.navy }}>Trocar</Text>
               </Pressable>
@@ -163,7 +165,7 @@ export default function FeedingPlan({ stats, products, wetPerDay, meals, onPick,
             >
               <Ionicons name="add" size={18} color={colors.navy} />
               <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.navy }}>
-                {slot === 'dry' ? 'Adicionar ração seca' : 'Adicionar comida húmida'}
+                {slotTitles ? `Adicionar ${title.toLowerCase()}` : slot === 'dry' ? 'Adicionar ração seca' : 'Adicionar comida húmida'}
               </Text>
             </Pressable>
           )}

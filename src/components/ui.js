@@ -1,6 +1,7 @@
 // Componentes base da interface, todos com a paleta Coral e marinho.
 
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -172,8 +173,9 @@ export function Chip({ label, active, onPress }) {
 }
 
 export function Avatar({ animal, size = 48 }) {
-  const initial = (animal?.name || '?').trim().charAt(0).toUpperCase();
-  const tint = animal?.species === 'dog' ? { bg: '#DCE6F2', fg: colors.navy } : { bg: colors.coralTint, fg: colors.coralTintText };
+  // Cores da paleta Coral e marinho: gato em coral, cão em marinho.
+  const tint = animal?.species === 'dog' || animal?.species === 'fish' ? { bg: colors.navy, fg: colors.white } : { bg: colors.coralTint, fg: colors.coralDark };
+  const ICONS = { cat: 'cat', dog: 'dog', bird: 'bird', small: 'rabbit', fish: 'fish', reptile: 'turtle' };
   if (animal?.photoUri) {
     return (
       <Image
@@ -183,9 +185,14 @@ export function Avatar({ animal, size = 48 }) {
       />
     );
   }
+  // Sem foto: o desenho de um gato ou de um cão (conforme o animal).
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint.bg, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontFamily: fonts.display, fontSize: size * 0.42, color: tint.fg }}>{initial}</Text>
+    <View
+      accessible
+      accessibilityLabel={animal?.name ? `${animal.name}, sem foto` : 'Sem foto'}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint.bg, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <MaterialCommunityIcons name={ICONS[animal?.species] || 'cat'} size={size * 0.56} color={tint.fg} />
     </View>
   );
 }

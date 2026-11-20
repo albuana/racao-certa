@@ -121,7 +121,19 @@ export function StoreProvider({ children }) {
   const completeSignIn = useCallback(
     async (user, mode) => {
       remoteReady.current = false;
-      setState((s) => ({ ...s, account: { mode, userId: user.id, email: user.email || null } }));
+      // Nome e foto da conta Google (a Apple não dá foto); a pessoa pode trocar a foto no Perfil.
+      const meta = user.user_metadata || {};
+      setState((s) => ({
+        ...s,
+        account: {
+          ...(s.account?.userId === user.id ? s.account : {}),
+          mode,
+          userId: user.id,
+          email: user.email || null,
+          name: meta.full_name || meta.name || s.account?.name || null,
+          avatarUrl: meta.avatar_url || meta.picture || null,
+        },
+      }));
       await pullAndMerge(user.id);
     },
     [pullAndMerge]
@@ -147,6 +159,11 @@ export function StoreProvider({ children }) {
     if (error) throw error;
     await signOut();
   }, [signOut]);
+
+  // Dados da conta guardados no telemóvel (ex.: foto escolhida pela pessoa).
+  const updateAccount = useCallback((patch) => {
+    setState((s) => ({ ...s, account: { ...(s.account || { mode: 'guest' }), ...patch } }));
+  }, []);
 
   const setHouseName = useCallback((name) => {
     setState((s) => ({ ...s, house: { ...(s.house || {}), name, updatedAt: now() } }));
@@ -285,6 +302,7 @@ export function StoreProvider({ children }) {
       setPickedProductId,
       continueAsGuest,
       completeSignIn,
+      updateAccount,
       signOut,
       deleteAccount,
       setHouseName,
@@ -307,6 +325,7 @@ export function StoreProvider({ children }) {
       pickedProductId,
       continueAsGuest,
       completeSignIn,
+      updateAccount,
       signOut,
       deleteAccount,
       setHouseName,
