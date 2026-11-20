@@ -37,12 +37,13 @@ export async function pickPhoto() {
 }
 
 // Pergunta: câmara ou galeria. Devolve o uri guardado (ou null).
-export function choosePhoto(onPicked, onRemove) {
+// title: o que aparece no topo (por omissão "Foto do animal").
+export function choosePhoto(onPicked, onRemove, { title = 'Foto do animal', removeLabel = 'Remover foto' } = {}) {
   const buttons = [
     { text: 'Tirar foto', onPress: async () => { const u = await takePhoto(); if (u) onPicked(u); } },
     { text: 'Escolher da galeria', onPress: async () => { const u = await pickPhoto(); if (u) onPicked(u); } },
   ];
-  if (onRemove) buttons.push({ text: 'Remover foto', style: 'destructive', onPress: onRemove });
+  if (onRemove) buttons.push({ text: removeLabel, style: 'destructive', onPress: onRemove });
   buttons.push({ text: 'Cancelar', style: 'cancel' });
-  Alert.alert('Foto do animal', undefined, buttons);
+  Alert.alert(title, undefined, buttons);
 }

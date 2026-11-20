@@ -129,9 +129,11 @@ export default function AnimalForm() {
       stage: animalForCalc.stage,
       productId: null,
     });
-    if (onboarding) finishOnboarding({ pathname: '/animal/[id]', params: { id } });
+    // Cães e gatos novos: a seguir pergunta o que comem (seca, húmida ou as duas).
+    const next = catDog ? { pathname: '/animal/dieta', params: { id, depois: 'ficha' } } : { pathname: '/animal/[id]', params: { id } };
+    if (onboarding) finishOnboarding(next);
     else if (editing) router.back();
-    else router.replace({ pathname: '/animal/[id]', params: { id } });
+    else router.replace(next);
   };
 
   // Fim do início: limpa os ecrãs para trás (login, casa) para não se voltar a eles sem querer.

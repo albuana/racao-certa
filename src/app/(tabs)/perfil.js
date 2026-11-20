@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, Text, View } from 'react-native';
+import HouseNameInput, { houseFull, housePart } from '../../components/HouseNameInput';
 import { LogoIcon } from '../../components/Logo';
-import { Body, Button, Card, Field, Label, Screen, Title } from '../../components/ui';
+import { Body, Button, Card, Screen, Title } from '../../components/ui';
 import { authMessage } from '../../lib/auth';
 import { choosePhoto } from '../../lib/photos';
 import { authEnabled, supabase } from '../../lib/supabase';
@@ -36,17 +37,20 @@ export default function Perfil() {
 
   const photo = account?.photoUri || account?.avatarUrl || null;
   const changePhoto = () =>
-    choosePhoto((uri) => updateAccount({ photoUri: uri }), account?.photoUri ? () => updateAccount({ photoUri: null }) : undefined);
+    choosePhoto((uri) => updateAccount({ photoUri: uri }), account?.photoUri ? () => updateAccount({ photoUri: null }) : undefined, {
+      title: 'A tua foto',
+      removeLabel: account?.avatarUrl ? 'Voltar à foto do Google' : 'Remover foto',
+    });
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const signedIn = Boolean(account?.userId);
 
   const startEdit = () => {
-    setName(house?.name || '');
+    setName(housePart(house?.name || ''));
     setEditing(true);
   };
   const saveName = () => {
-    setHouseName(name.trim());
+    setHouseName(houseFull(name));
     setEditing(false);
   };
 
@@ -146,7 +150,7 @@ export default function Perfil() {
       <Card style={{ gap: 12 }}>
         {editing ? (
           <>
-            <Field label="Nome da casa" value={name} onChangeText={setName} maxLength={40} autoFocus />
+            <HouseNameInput value={name} onChangeText={setName} autoFocus onSubmitEditing={() => name.trim() && saveName()} />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button variant="ghost" title="Cancelar" onPress={() => setEditing(false)} style={{ flex: 1 }} />
               <Button variant="primary" title="Guardar" disabled={!name.trim()} onPress={saveName} style={{ flex: 1 }} />
@@ -160,8 +164,9 @@ export default function Perfil() {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
           >
             <View style={{ flex: 1 }}>
-              <Label>Casa</Label>
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 20, color: colors.text }}>{house?.name || 'Sem nome'}</Text>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 20, color: colors.text }}>
+                Casa {housePart(house?.name || '')}
+              </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Ionicons name="pencil" size={16} color={colors.coralDark} />
@@ -175,9 +180,6 @@ export default function Perfil() {
       </Card>
 
       <View style={{ gap: 8 }}>
-        <Body muted size={12}>
-          As doses são estimativas de referência e não substituem o conselho do veterinário. Os preços não incluem portes.
-        </Body>
         {signedIn ? (
           <>
             <Button variant="secondary" title="Terminar sessão" onPress={confirmSignOut} />

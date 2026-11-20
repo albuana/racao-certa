@@ -211,13 +211,31 @@ export default function AnimalDetail() {
         </View>
       ))}
 
-      <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>Alimentação</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.text }}>Alimentação</Text>
+        {!other ? (
+          <Pressable onPress={() => router.push({ pathname: '/animal/dieta', params: { id: animal.id } })} accessibilityRole="button" hitSlop={8} style={{ minHeight: 36, justifyContent: 'center' }}>
+            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.navy }}>
+              {stored.diet === 'dry' ? 'Só seca' : stored.diet === 'wet' ? 'Só húmida' : stored.diet === 'mixed' ? 'Seca e húmida' : 'O que come?'} · mudar
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
       <FeedingPlan
         stats={s}
         products={{ dry: dryP, wet: wetP }}
         wetPerDay={stored.wetPerDay ?? 1}
         meals={s.meals}
-        slotTitles={other ? { dry: 'Comida', wet: null } : undefined}
+        slotTitles={
+          other
+            ? { dry: 'Comida', wet: null }
+            : stored.diet === 'dry'
+              ? { dry: 'Ração seca', wet: wetP ? 'Comida húmida' : null }
+              : stored.diet === 'wet'
+                ? { dry: dryP ? 'Ração seca' : null, wet: 'Comida húmida' }
+                : undefined
+        }
+        hideEnergy={other}
         onPick={openPicker}
         onEditKcal={(p, kcalPerKg) => updateProduct(p.id, { kcalPerKg, kcalEstimated: false, tags: (p.tags || []).filter((t) => t !== 'Energia estimada') })}
         onRemove={removeSlot}

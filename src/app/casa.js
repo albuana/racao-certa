@@ -2,20 +2,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, View } from 'react-native';
-import { Body, Button, Chip, Field, Screen, StepHeader, Title } from '../components/ui';
+import HouseNameInput, { houseFull, housePart } from '../components/HouseNameInput';
+import { Body, Button, Screen, StepHeader, Title } from '../components/ui';
 import { useStore } from '../store/AppStore';
 import { colors } from '../theme';
 
-const SUGGESTIONS = ['Casa', 'Apartamento', 'Casa de férias'];
 
 export default function Casa() {
   const { house, setHouseName, animals } = useStore();
-  const [name, setName] = useState(house?.name || '');
+  const [name, setName] = useState(housePart(house?.name || ''));
   const valid = name.trim().length > 0;
 
   const next = () => {
     if (!valid) return;
-    setHouseName(name.trim());
+    setHouseName(houseFull(name));
     if (animals.length) {
       if (router.canDismiss()) router.dismissAll();
       router.replace('/procurar');
@@ -33,12 +33,7 @@ export default function Casa() {
         <Body muted>
           A casa junta os teus animais e as pessoas que cuidam deles. Mais tarde podes convidar a família.
         </Body>
-        <Field label="Nome da casa" value={name} onChangeText={setName} placeholder="Casa da Rita" maxLength={40} />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {SUGGESTIONS.map((s) => (
-            <Chip key={s} label={s} active={name === s} onPress={() => setName(s)} />
-          ))}
-        </View>
+        <HouseNameInput value={name} onChangeText={setName} onSubmitEditing={next} />
       </Screen>
     </KeyboardAvoidingView>
   );
