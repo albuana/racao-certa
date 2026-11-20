@@ -188,6 +188,14 @@ export function StoreProvider({ children }) {
     return id;
   }, []);
 
+  // Corrige dados de uma ração (ex.: a energia do rótulo).
+  const updateProduct = useCallback((productId, patch) => {
+    setState((s) => ({
+      ...s,
+      customProducts: s.customProducts.map((p) => (p.id === productId ? { ...p, ...patch } : p)),
+    }));
+  }, []);
+
   // Guarda os preços das lojas de uma ração (vindos do servidor de preços).
   const updateProductOffers = useCallback((productId, offers, updatedAt) => {
     setState((s) => ({
@@ -285,6 +293,7 @@ export function StoreProvider({ children }) {
       openBag,
       addCustomProduct,
       updateProductOffers,
+      updateProduct,
       toggleFavorite,
       updateFavorite,
       recordFood,
@@ -306,6 +315,7 @@ export function StoreProvider({ children }) {
       openBag,
       addCustomProduct,
       updateProductOffers,
+      updateProduct,
       toggleFavorite,
       updateFavorite,
       recordFood,

@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import AnimalRow from '../../components/AnimalRow';
 import { Banner, Body, Screen, Title } from '../../components/ui';
 import { animalStats, householdTotals, nextToRunOut } from '../../lib/household';
-import { scheduleRunOutReminders } from '../../lib/notify';
+import { scheduleRunOutReminders, scheduleWeighReminders } from '../../lib/notify';
 import { formatEuro, formatNumber } from '../../lib/nutrition';
 import { useStore } from '../../store/AppStore';
 import { colors, fonts } from '../../theme';
@@ -30,6 +30,12 @@ export default function Inicio() {
         return { animalId: a.id, name: a.name, daysLeft: st.daysLeft, store: st.dry?.offer?.store || st.offer?.store };
       });
       scheduleRunOutReminders(items);
+      scheduleWeighReminders(
+        animals.map((a) => {
+          const list = a.weighIns || [];
+          return { animalId: a.id, name: a.name, female: a.sex === 'f', lastAt: list.length ? list[list.length - 1].at : a.createdAt || a.updatedAt };
+        })
+      );
     }, [animals, customProducts])
   );
 

@@ -26,7 +26,9 @@ import { planIds, splitPlan } from '../../lib/household';
 import { findProduct } from '../../data/products';
 import { choosePhoto } from '../../lib/photos';
 import {
+  BODY_CONDITIONS,
   DOG_SIZES,
+  bodyCondition,
   HEALTH_CONDITIONS,
   SPECIES,
   dailyKcal,
@@ -126,10 +128,17 @@ export default function AnimalForm() {
       Alert.alert('Falta preencher', `Indica ${errors.join(' e ')}.`);
       return;
     }
+    const kgNow = parseNumber(form.weight);
+    const prevKg = editing ? parseNumber(editing.weight) : null;
+    const weighIns = !editing || Math.abs(kgNow - prevKg) >= 0.01
+      ? [...(form.weighIns || []), { at: new Date().toISOString(), kg: kgNow, bcs: bodyCondition(form) }].slice(-60)
+      : form.weighIns || [];
     const id = saveAnimal({
       ...form,
+      weighIns,
+      createdAt: form.createdAt || new Date().toISOString(),
       name: form.name.trim(),
-      weight: parseNumber(form.weight),
+      weight: kgNow,
       stage: animalForCalc.stage,
       productId: null,
     });
@@ -278,16 +287,15 @@ export default function AnimalForm() {
           onChange={(active) => set({ active })}
           options={isDog ? [{ value: false, label: 'Calmo' }, { value: true, label: 'Muito ativo' }] : [{ value: false, label: 'Interior' }, { value: true, label: 'Vai à rua' }]}
         />
-        {animalForCalc.stage !== 'junior' ? (
-          <Segmented
-            label="Objetivo"
-            value={form.goal}
-            onChange={(goal) => set({ goal })}
-            options={[
-              { value: 'keep', label: 'Manter peso' },
-              { value: 'lose', label: 'Perder peso' },
-            ]}
-          />
+        {/* Condição corporal: é assim que o veterinário ajusta a dose */}
+        <OptionGrid
+          label={`Como está o corpo ${female ? 'dela' : 'dele'}?`}
+          value={bodyCondition(form)}
+          onChange={(bcs) => set({ bcs, goal: bcs === 'over' ? 'lose' : 'keep' })}
+          options={BODY_CONDITIONS.map((b) => ({ value: b.id, label: female ? b.labelF : b.label, hint: b.hint }))}
+        />
+        {bodyCondition(form) === 'over' && animalForCalc.stage === 'junior' ? (
+          <Body muted size={12}>Nos júnior não se corta a comida: fala com o veterinário sobre o peso.</Body>
         ) : null}
 
         {/* Problemas de saúde */}

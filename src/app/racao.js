@@ -8,11 +8,11 @@ import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, Text, 
 import Scanner from '../components/Scanner';
 import { BackButton, Body, Button, Chip, Field, Screen, Title, styles as ui } from '../components/ui';
 import { findByEan, findProduct } from '../data/products';
-import { inferConditions, inferStagesFor, lookupBarcode, priceSearchUrl, typicalKcalPerKg } from '../lib/lookup';
+import { inferConditions, inferStagesFor, lookupBarcode, priceSearchUrl, searchProducts, typicalKcalPerKg } from '../lib/lookup';
 import { HEALTH_CONDITIONS, cheapestOffer, formatEuro, formatNumber, parseNumber, stagesFor } from '../lib/nutrition';
 import { fetchSuggestions } from '../lib/prices';
 import { planIds } from '../lib/household';
-import { groupResults, searchStores } from '../lib/search';
+import { groupResults, sameProduct, searchStores } from '../lib/search';
 import { useStore } from '../store/AppStore';
 import { colors, fonts } from '../theme';
 
@@ -147,7 +147,15 @@ export default function RacaoPicker() {
     const existing = customProducts.find((p) => p.name.toLowerCase() === g.name.toLowerCase());
     if (existing) return confirmFit(existing, () => finish(existing.id));
     const text = `${g.brand || ''} ${g.name}`;
-    confirmFit({ name: g.name, brand: g.brand, stages: inferStagesFor(text), conditions: inferConditions(text) }, () => {
+    confirmFit({ name: g.name, brand: g.brand, stages: inferStagesFor(text), conditions: inferConditions(text) }, async () => {
+      // Energia do rótulo (energia metabolizável), se esta ração estiver na base aberta; senão fica a estimativa.
+      setLooking(true);
+      const label = await Promise.race([
+        searchProducts(g.name).catch(() => []),
+        new Promise((r) => setTimeout(() => r([]), 5000)),
+      ]);
+      setLooking(false);
+      const real = label.find((p) => !p.kcalEstimated && p.kcalPerKg && sameProduct({ name: `${p.brand || ''} ${p.name}`, type: p.type }, { name: g.name, type: g.type }));
       const id = addCustomProduct({
         name: g.name,
         brand: g.brand || '',
@@ -155,11 +163,12 @@ export default function RacaoPicker() {
         stages: inferStagesFor(text),
         conditions: inferConditions(text),
         type: g.type || type,
-        kcalPerKg: g.kcalKg,
-        kcalEstimated: true,
+        kcalPerKg: real ? real.kcalPerKg : g.kcalKg,
+        kcalEstimated: !real,
+        ean: real?.ean || undefined,
         quantity: g.kg ? `${g.kg} kg` : '',
         imageUrl: g.image || null,
-        tags: ['Energia estimada'],
+        tags: real ? [] : ['Energia estimada'],
         offers: [g.offer, ...g.offers.filter((o) => o !== g.offer)]
           .filter((o) => o && (o.kg || o.perKg))
           .map((o) => ({ store: o.store, kg: o.kg || (o.perKg ? o.price / o.perKg : null), price: o.price, link: o.link, origin: 'site' })),
@@ -209,7 +218,7 @@ export default function RacaoPicker() {
       {looking ? (
         <View style={[ui.card, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
           <ActivityIndicator color={colors.navy} />
-          <Body>A procurar o produto pelo código de barras…</Body>
+          <Body>Um momento…</Body>
         </View>
       ) : null}
 

@@ -3,6 +3,7 @@ import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-rou
 import { useCallback, useEffect } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import FeedingPlan from '../../components/FeedingPlan';
+import WeighCard from '../../components/WeighCard';
 import { Avatar, BackButton, Body, Button, Card, Screen, Title } from '../../components/ui';
 import { animalStats, planIds } from '../../lib/household';
 import { ageText, conditionLabel, doseLooksHigh, formatEuro, formatNumber, neuterYesLabel, stageLabel, withAutoStage } from '../../lib/nutrition';
@@ -15,7 +16,7 @@ import { colors, fonts } from '../../theme';
 
 export default function AnimalDetail() {
   const { id } = useLocalSearchParams();
-  const { animals, customProducts, saveAnimal, removeAnimal, openBag, updateProductOffers, pickedProductId, setPickedProductId } = useStore();
+  const { animals, customProducts, saveAnimal, removeAnimal, openBag, updateProductOffers, updateProduct, pickedProductId, setPickedProductId } = useStore();
   const stored = animals.find((a) => a.id === id);
   // Ao voltar do seletor de ração, guarda a nova ração neste animal.
   useFocusEffect(
@@ -165,6 +166,27 @@ export default function AnimalDetail() {
         ) : null}
       </Card>
 
+      <WeighCard
+        animal={stored}
+        onSave={({ kg, bcs }) => {
+          const before = animalStats(stored, customProducts);
+          const next = {
+            ...stored,
+            weight: kg,
+            bcs,
+            goal: bcs === 'over' ? 'lose' : 'keep',
+            weighIns: [...(stored.weighIns || []), { at: new Date().toISOString(), kg, bcs }].slice(-60),
+          };
+          saveAnimal(next);
+          const after = animalStats(next, customProducts);
+          const b = before.dry?.grams;
+          const a = after.dry?.grams;
+          if (b && a && Math.abs(a - b) >= 1) {
+            Alert.alert('Dose atualizada', `A ração seca de ${stored.name} passa de ${formatNumber(b)} g para ${formatNumber(a)} g por dia.`);
+          }
+        }}
+      />
+
       {issueList.map(({ product, issues }) => (
         <View key={product.id} style={{ backgroundColor: colors.alertBg, borderColor: colors.alertBorder, borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -187,6 +209,7 @@ export default function AnimalDetail() {
         wetPerDay={stored.wetPerDay ?? 1}
         meals={s.meals}
         onPick={openPicker}
+        onEditKcal={(p, kcalPerKg) => updateProduct(p.id, { kcalPerKg, kcalEstimated: false, tags: (p.tags || []).filter((t) => t !== 'Energia estimada') })}
         onRemove={removeSlot}
         onWetChange={(n) => saveAnimal({ ...stored, wetPerDay: n })}
         onCompare={(p) => router.push({ pathname: '/comparar/[productId]', params: { productId: p.id } })}

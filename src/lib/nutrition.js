@@ -171,10 +171,30 @@ export const ENERGY_SOURCES = [
   'NRC (2006) Nutrient Requirements of Dogs and Cats',
 ];
 
+// Condição corporal (como fazem os veterinários, escala de 1 a 9 resumida em 3).
+// 'thin' (1–3), 'ideal' (4–5), 'over' (6–9). Animais antigos: goal 'lose' conta como 'over'.
+export const BODY_CONDITIONS = [
+  { id: 'thin', label: 'Magro', labelF: 'Magra', hint: 'Vês as costelas e os ossos da anca; quase sem gordura ao toque.' },
+  { id: 'ideal', label: 'Ideal', labelF: 'Ideal', hint: 'Sentes as costelas sem as ver; tem cintura vista de cima.' },
+  { id: 'over', label: 'Com peso a mais', labelF: 'Com peso a mais', hint: 'Custa a sentir as costelas; sem cintura, barriga redonda.' },
+];
+
+export function bodyCondition(animal) {
+  if (animal.bcs) return animal.bcs;
+  return animal.goal === 'lose' ? 'over' : 'ideal';
+}
+
 export function energyFactor(animal) {
+  // Magro: mais 10% para recuperar peso (em todas as idades).
+  const base = energyFactorBase(animal);
+  return bodyCondition(animal) === 'thin' ? base * 1.1 : base;
+}
+
+function energyFactorBase(animal) {
   const { species, stage, neutered, goal, active } = animal;
   const ageMonths = animal.ageMonths;
-  const lose = goal === 'lose' && stage !== 'junior';
+  // Com peso a mais: plano de perda de peso (nos júnior não se corta o crescimento).
+  const lose = (goal === 'lose' || animal.bcs === 'over') && stage !== 'junior';
 
   if (species === 'dog') {
     if (stage === 'junior') return ageMonths != null && ageMonths < 4 ? 3.0 : 2.0;
@@ -247,7 +267,9 @@ export function describeAnimal(animal) {
   const parts = [];
   if (animal.stage && words[animal.stage]) parts.push(words[animal.stage][female ? 1 : 0]);
   if (animal.neutered) parts.push(female ? 'esterilizada' : 'castrado');
-  if (animal.goal === 'lose' && animal.stage !== 'junior') parts.push('em dieta');
+  const bcs = bodyCondition(animal);
+  if (bcs === 'over' && animal.stage !== 'junior') parts.push('em dieta');
+  if (bcs === 'thin') parts.push('a ganhar peso');
   return parts.join(' · ');
 }
 
